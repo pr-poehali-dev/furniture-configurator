@@ -1,4 +1,5 @@
 import Navbar from '@/components/Navbar';
+import Breadcrumbs from '@/components/Breadcrumbs';
 import HeroSection from '@/components/HeroSection';
 import WhyUsSection from '@/components/WhyUsSection';
 import ProjectsCarousel from '@/components/ProjectsCarousel';
@@ -14,6 +15,7 @@ export default function Index() {
     <div className="min-h-screen">
       <Navbar />
       <HeroSection />
+      <Breadcrumbs />
       <WhyUsSection />
       <ProjectsCarousel />
       <ConstructorSection />
