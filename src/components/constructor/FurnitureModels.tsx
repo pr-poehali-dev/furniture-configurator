@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
-import { makeWoodTexture, type WoodKind } from './woodTexture';
+import { RoundedBox } from '@react-three/drei';
+import { makeWoodTexture, makeRoughnessTexture, type WoodKind } from './woodTexture';
 import type { Config } from './types';
 
 const MATERIAL_TO_WOOD: Record<string, WoodKind> = {
@@ -30,12 +31,17 @@ const HARDWARE_COLOR: Record<string, string> = {
 
 function useWoodMaterial(material: string, opts?: { rough?: number; metal?: number }) {
   return useMemo(() => {
-    const tex = makeWoodTexture(MATERIAL_TO_WOOD[material] ?? 'oak');
+    const kind = MATERIAL_TO_WOOD[material] ?? 'oak';
+    const tex = makeWoodTexture(kind);
     tex.repeat.set(2, 1);
+    const rough = makeRoughnessTexture(kind);
+    rough.repeat.set(2, 1);
     return new THREE.MeshStandardMaterial({
       map: tex,
-      roughness: material === 'white' ? 0.35 : opts?.rough ?? 0.55,
-      metalness: opts?.metal ?? 0.05,
+      roughnessMap: rough,
+      roughness: material === 'white' ? 0.4 : opts?.rough ?? 0.62,
+      metalness: opts?.metal ?? 0.04,
+      envMapIntensity: material === 'white' ? 0.6 : 0.4,
     });
   }, [material, opts?.rough, opts?.metal]);
 }
@@ -135,15 +141,26 @@ function TableModel({ config }: { config: Config }) {
 
   return (
     <group position={[0, 0, 0]}>
-      {/* tabletop */}
-      <mesh castShadow receiveShadow position={[0, h + thickness / 2, 0]} material={top}>
-        <boxGeometry args={[w, thickness, d]} />
-      </mesh>
+      {/* tabletop with chamfered edges */}
+      <RoundedBox
+        args={[w, thickness, d]}
+        radius={Math.min(thickness * 0.4, 0.03)}
+        smoothness={4}
+        castShadow
+        receiveShadow
+        position={[0, h + thickness / 2, 0]}
+        material={top}
+      />
 
       {/* drawer apron under the top (front-facing +Z) */}
-      <mesh castShadow position={[0, drawerY, d / 2 - 0.06]} material={top}>
-        <boxGeometry args={[w * 0.55, drawerH, 0.05]} />
-      </mesh>
+      <RoundedBox
+        args={[w * 0.55, drawerH, 0.05]}
+        radius={0.012}
+        smoothness={3}
+        castShadow
+        position={[0, drawerY, d / 2 - 0.06]}
+        material={top}
+      />
       {/* drawer handle */}
       {hasHw && (
         <Handle x={0} y={drawerY} z={d / 2 - 0.035} material={hwMat} bar={barHandle} />

@@ -1,35 +1,49 @@
 import { Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, ContactShadows, Environment, Center } from '@react-three/drei';
+import { OrbitControls, ContactShadows, Environment, Center, SoftShadows } from '@react-three/drei';
+import * as THREE from 'three';
 import FurnitureModels from './FurnitureModels';
 import type { Config } from './types';
 
 export default function Scene3D({ config, warm }: { config: Config; warm: boolean }) {
   return (
     <Canvas
-      shadows
+      shadows="soft"
       dpr={[1, 2]}
-      camera={{ position: [3.2, 2.4, 3.6], fov: 38 }}
-      gl={{ antialias: true, preserveDrawingBuffer: true }}
+      camera={{ position: [3.2, 2.2, 3.8], fov: 36 }}
+      gl={{
+        antialias: true,
+        preserveDrawingBuffer: true,
+        toneMapping: THREE.ACESFilmicToneMapping,
+        toneMappingExposure: warm ? 1.05 : 1.15,
+      }}
     >
-      <color attach="background" args={[warm ? '#2a2420' : '#242424']} />
+      <SoftShadows size={28} samples={16} focus={0.9} />
 
-      {/* Lighting */}
-      <ambientLight intensity={warm ? 0.5 : 0.7} color={warm ? '#ffd9a0' : '#ffffff'} />
+      {/* gradient backdrop */}
+      <color attach="background" args={[warm ? '#26201b' : '#202225']} />
+      <fog attach="fog" args={[warm ? '#26201b' : '#202225', 9, 16]} />
+
+      {/* Key light */}
+      <ambientLight intensity={warm ? 0.35 : 0.45} color={warm ? '#ffe2bd' : '#ffffff'} />
       <directionalLight
-        position={[4, 6, 3]}
-        intensity={warm ? 1.6 : 1.9}
-        color={warm ? '#ffcf95' : '#fff6e8'}
+        position={[5, 7, 4]}
+        intensity={warm ? 2.1 : 2.4}
+        color={warm ? '#ffcf95' : '#fff4e2'}
         castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
-        shadow-camera-far={20}
-        shadow-camera-left={-6}
-        shadow-camera-right={6}
-        shadow-camera-top={6}
-        shadow-camera-bottom={-6}
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-far={25}
+        shadow-camera-left={-7}
+        shadow-camera-right={7}
+        shadow-camera-top={7}
+        shadow-camera-bottom={-7}
+        shadow-bias={-0.0003}
+        shadow-normalBias={0.02}
       />
-      <directionalLight position={[-4, 3, -2]} intensity={0.5} color={warm ? '#a06840' : '#9bb6ff'} />
+      {/* Fill + rim light */}
+      <directionalLight position={[-5, 3, -3]} intensity={0.6} color={warm ? '#b07848' : '#9bb6ff'} />
+      <spotLight position={[0, 6, -5]} intensity={0.8} angle={0.6} penumbra={1} color={warm ? '#ffb870' : '#cfe0ff'} />
 
       <Suspense fallback={null}>
         <Center disableY>
@@ -37,13 +51,20 @@ export default function Scene3D({ config, warm }: { config: Config; warm: boolea
             <FurnitureModels config={config} />
           </group>
         </Center>
+
+        {/* studio floor for grounding + subtle reflection */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.43, 0]} receiveShadow>
+          <planeGeometry args={[40, 40]} />
+          <meshStandardMaterial color={warm ? '#1d1813' : '#1a1c1e'} roughness={0.75} metalness={0.15} />
+        </mesh>
+
         <ContactShadows
           position={[0, -1.42, 0]}
-          opacity={0.55}
-          scale={10}
-          blur={2.4}
-          far={4}
-          resolution={512}
+          opacity={0.7}
+          scale={11}
+          blur={2.8}
+          far={4.5}
+          resolution={1024}
           color="#000000"
         />
         <Environment preset={warm ? 'apartment' : 'city'} />
@@ -56,7 +77,7 @@ export default function Scene3D({ config, warm }: { config: Config; warm: boolea
         minPolarAngle={0.2}
         maxPolarAngle={Math.PI / 2.05}
         autoRotate
-        autoRotateSpeed={0.6}
+        autoRotateSpeed={0.55}
         enableDamping
         dampingFactor={0.08}
       />

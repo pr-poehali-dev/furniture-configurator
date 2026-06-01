@@ -75,9 +75,46 @@ export function makeWoodTexture(kind: WoodKind): THREE.Texture {
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  texture.anisotropy = 8;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 16;
   cache.set(kind, texture);
   return texture;
+}
+
+const roughCache = new Map<string, THREE.Texture>();
+
+/**
+ * Generate a roughness map from grain — darker grain = slightly rougher,
+ * giving wood subtle depth under light.
+ */
+export function makeRoughnessTexture(kind: WoodKind): THREE.Texture {
+  const key = `r_${kind}`;
+  if (roughCache.has(key)) return roughCache.get(key)!;
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = kind === 'white' ? '#9a9a9a' : '#b0b0b0';
+  ctx.fillRect(0, 0, size, size);
+  if (kind !== 'metal') {
+    for (let i = 0; i < 60; i++) {
+      const y = (i / 60) * size + (Math.random() - 0.5) * 5;
+      ctx.strokeStyle = `rgba(${Math.random() > 0.5 ? '255,255,255' : '60,60,60'},${0.1 + Math.random() * 0.2})`;
+      ctx.lineWidth = 1 + Math.random() * 2;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      for (let x = 0; x <= size; x += 16) {
+        ctx.lineTo(x, y + Math.sin((x / size) * Math.PI * 3) * 3);
+      }
+      ctx.stroke();
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  roughCache.set(key, tex);
+  return tex;
 }
 
 export type { WoodKind };

@@ -29,65 +29,179 @@ async function pdfToImage(file: File): Promise<string> {
   return canvas.toDataURL('image/jpeg', 0.85);
 }
 
+type Tool = 'curve' | 'line' | 'erase';
+
+const CW = 600;
+const CH = 400;
+const PX_PER_CM = 20; // 1 см = 20px → холст 30×20 см
+
+type Pt = { x: number; y: number };
+type Stroke = { tool: 'curve' | 'line'; points: Pt[]; size: number };
+
 export default function SketchTool({ onApply }: { onApply: (config: Partial<Config>) => void }) {
   const [mode, setMode] = useState<Mode>('draw');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
+  const currentStroke = useRef<Stroke | null>(null);
+  const strokes = useRef<Stroke[]>([]);
+  const [tool, setTool] = useState<Tool>('curve');
   const [hasDrawing, setHasDrawing] = useState(false);
+  const [liveLen, setLiveLen] = useState<{ cm: number; x: number; y: number } | null>(null);
   const [uploadPreview, setUploadPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [converting, setConverting] = useState(false);
   const [result, setResult] = useState<AnalyzedConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // init canvas
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+  const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = '#1A1A1A';
-    ctx.lineWidth = 3;
+    ctx.fillRect(0, 0, CW, CH);
+    // mm grid (light) — каждые 2px пропустим, рисуем по 4px = 0.2см мелкая
+    ctx.lineWidth = 1;
+    // minor lines every 0.5 cm
+    ctx.strokeStyle = '#eef1e9';
+    for (let x = 0; x <= CW; x += PX_PER_CM / 2) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+    }
+    for (let y = 0; y <= CH; y += PX_PER_CM / 2) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+    }
+    // major lines every 1 cm
+    ctx.strokeStyle = '#dce3d4';
+    for (let x = 0; x <= CW; x += PX_PER_CM) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+    }
+    for (let y = 0; y <= CH; y += PX_PER_CM) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+    }
+    // 5cm bold guides + labels
+    ctx.strokeStyle = '#c2cdb4';
+    ctx.fillStyle = '#9aa888';
+    ctx.font = '10px Montserrat, sans-serif';
+    for (let x = 0; x <= CW; x += PX_PER_CM * 5) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+      if (x > 0) ctx.fillText(`${x / PX_PER_CM}`, x + 2, 11);
+    }
+    for (let y = 0; y <= CH; y += PX_PER_CM * 5) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+      if (y > 0) ctx.fillText(`${y / PX_PER_CM}`, 2, y - 2);
+    }
+  }, []);
+
+  const renderAll = useCallback(() => {
+    const ctx = canvasRef.current?.getContext('2d');
+    if (!ctx) return;
+    drawGrid(ctx);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-  }, [mode]);
+    for (const s of strokes.current) {
+      ctx.strokeStyle = '#1A1A1A';
+      ctx.lineWidth = s.size;
+      ctx.beginPath();
+      if (s.tool === 'line' && s.points.length >= 2) {
+        const a = s.points[0];
+        const b = s.points[s.points.length - 1];
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+        // dimension label
+        const cm = Math.hypot(b.x - a.x, b.y - a.y) / PX_PER_CM;
+        ctx.fillStyle = '#8B4513';
+        ctx.font = 'bold 12px Montserrat, sans-serif';
+        ctx.fillText(`${cm.toFixed(1)} см`, (a.x + b.x) / 2 + 6, (a.y + b.y) / 2 - 6);
+      } else if (s.points.length) {
+        ctx.moveTo(s.points[0].x, s.points[0].y);
+        for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
+        ctx.stroke();
+      }
+    }
+  }, [drawGrid]);
 
-  const pos = (e: React.PointerEvent) => {
+  // init / re-render canvas
+  useEffect(() => {
+    renderAll();
+  }, [mode, renderAll]);
+
+  const pos = (e: React.PointerEvent): Pt => {
     const canvas = canvasRef.current!;
     const rect = canvas.getBoundingClientRect();
     return {
-      x: ((e.clientX - rect.left) / rect.width) * canvas.width,
-      y: ((e.clientY - rect.top) / rect.height) * canvas.height,
+      x: ((e.clientX - rect.left) / rect.width) * CW,
+      y: ((e.clientY - rect.top) / rect.height) * CH,
     };
   };
 
-  const start = (e: React.PointerEvent) => {
-    drawing.current = true;
-    const ctx = canvasRef.current!.getContext('2d')!;
-    const p = pos(e);
-    ctx.beginPath();
-    ctx.moveTo(p.x, p.y);
+  const eraseAt = (p: Pt) => {
+    const r = 14;
+    strokes.current = strokes.current.filter(
+      (s) => !s.points.some((pt) => Math.hypot(pt.x - p.x, pt.y - p.y) < r)
+    );
+    renderAll();
+    setHasDrawing(strokes.current.length > 0);
   };
+
+  const start = (e: React.PointerEvent) => {
+    const p = pos(e);
+    if (tool === 'erase') { drawing.current = true; eraseAt(p); return; }
+    drawing.current = true;
+    currentStroke.current = { tool, points: [p], size: 3 };
+  };
+
   const move = (e: React.PointerEvent) => {
     if (!drawing.current) return;
-    const ctx = canvasRef.current!.getContext('2d')!;
     const p = pos(e);
-    ctx.lineTo(p.x, p.y);
-    ctx.stroke();
-    setHasDrawing(true);
+    if (tool === 'erase') { eraseAt(p); return; }
+    const cs = currentStroke.current!;
+    if (tool === 'line') {
+      cs.points = [cs.points[0], p];
+    } else {
+      cs.points.push(p);
+    }
+    // live preview
+    renderAll();
+    const ctx = canvasRef.current!.getContext('2d')!;
+    ctx.strokeStyle = '#1A1A1A';
+    ctx.lineWidth = cs.size;
+    ctx.beginPath();
+    if (tool === 'line') {
+      const a = cs.points[0];
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      const cm = Math.hypot(p.x - a.x, p.y - a.y) / PX_PER_CM;
+      setLiveLen({ cm, x: (a.x + p.x) / 2, y: (a.y + p.y) / 2 });
+    } else {
+      ctx.moveTo(cs.points[0].x, cs.points[0].y);
+      for (let i = 1; i < cs.points.length; i++) ctx.lineTo(cs.points[i].x, cs.points[i].y);
+      ctx.stroke();
+    }
   };
-  const end = () => { drawing.current = false; };
+
+  const end = () => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    setLiveLen(null);
+    if (currentStroke.current && currentStroke.current.points.length >= (tool === 'line' ? 2 : 1)) {
+      strokes.current.push(currentStroke.current);
+      setHasDrawing(true);
+    }
+    currentStroke.current = null;
+    renderAll();
+  };
+
+  const undo = () => {
+    strokes.current.pop();
+    setHasDrawing(strokes.current.length > 0);
+    renderAll();
+  };
 
   const clearCanvas = () => {
-    const canvas = canvasRef.current!;
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    strokes.current = [];
+    currentStroke.current = null;
     setHasDrawing(false);
     setResult(null);
     setError(null);
+    renderAll();
   };
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -184,30 +298,77 @@ export default function SketchTool({ onApply }: { onApply: (config: Partial<Conf
 
       {/* canvas / upload area */}
       {mode === 'draw' ? (
-        <div className="relative">
-          <canvas
-            ref={canvasRef}
-            width={600}
-            height={340}
-            onPointerDown={start}
-            onPointerMove={move}
-            onPointerUp={end}
-            onPointerLeave={end}
-            className="w-full bg-white touch-none cursor-crosshair rounded-sm"
-            style={{ aspectRatio: '600/340' }}
-          />
-          <button
-            onClick={clearCanvas}
-            className="absolute top-3 right-3 bg-[#1A1A1A]/80 text-white p-2 hover:bg-[#1A1A1A] transition"
-            title="Очистить"
-          >
-            <Icon name="Eraser" size={14} />
-          </button>
-          {!hasDrawing && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <span className="font-opensans text-[#bbb] text-sm">Нарисуйте здесь...</span>
+        <div>
+          {/* drawing toolbar */}
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            {([
+              { id: 'curve', icon: 'Spline', label: 'Кривая' },
+              { id: 'line', icon: 'Minus', label: 'Линия' },
+              { id: 'erase', icon: 'Eraser', label: 'Ластик' },
+            ] as const).map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTool(t.id)}
+                className={`flex items-center gap-1.5 px-3 py-2 font-montserrat font-700 text-[10px] uppercase tracking-widest transition ${
+                  tool === t.id ? 'bg-[#A0784A] text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'
+                }`}
+                title={t.label}
+              >
+                <Icon name={t.icon} size={13} />
+                {t.label}
+              </button>
+            ))}
+            <div className="ml-auto flex gap-1.5">
+              <button
+                onClick={undo}
+                disabled={!hasDrawing}
+                className="p-2 bg-white/10 text-white/70 hover:bg-white/20 disabled:opacity-30 transition"
+                title="Отменить"
+              >
+                <Icon name="Undo2" size={14} />
+              </button>
+              <button
+                onClick={clearCanvas}
+                className="p-2 bg-white/10 text-white/70 hover:bg-white/20 transition"
+                title="Очистить всё"
+              >
+                <Icon name="Trash2" size={14} />
+              </button>
             </div>
-          )}
+          </div>
+
+          <div className="relative">
+            <canvas
+              ref={canvasRef}
+              width={CW}
+              height={CH}
+              onPointerDown={start}
+              onPointerMove={move}
+              onPointerUp={end}
+              onPointerLeave={end}
+              className="w-full bg-white touch-none cursor-crosshair rounded-sm border border-[#333]"
+              style={{ aspectRatio: `${CW}/${CH}` }}
+            />
+            {/* scale badge */}
+            <div className="absolute bottom-2 right-2 bg-[#1A1A1A]/80 text-white font-montserrat text-[10px] uppercase tracking-widest px-2 py-1 pointer-events-none">
+              Сетка 1×1 см · {CW / PX_PER_CM}×{CH / PX_PER_CM} см
+            </div>
+            {liveLen && (
+              <div
+                className="absolute bg-[#8B4513] text-white font-montserrat font-700 text-[11px] px-2 py-0.5 pointer-events-none -translate-x-1/2"
+                style={{ left: `${(liveLen.x / CW) * 100}%`, top: `${(liveLen.y / CH) * 100}%` }}
+              >
+                {liveLen.cm.toFixed(1)} см
+              </div>
+            )}
+            {!hasDrawing && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span className="font-opensans text-[#bbb] text-sm bg-white/70 px-3 py-1 rounded">
+                  Рисуйте по сетке: каждая клетка = 1 см
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         <div>
