@@ -13,9 +13,21 @@ import {
   FURNITURE_TYPES,
   GALLERY,
   Option,
+  FurnitureType,
 } from './constructor/types';
+import SketchTool from './constructor/SketchTool';
 
 const Scene3D = lazy(() => import('./constructor/Scene3D'));
+
+const VALID = {
+  furniture: ['table', 'shelf', 'nightstand'],
+  material: ['oak', 'walnut', 'white'],
+  size: ['s', 'm', 'l'],
+  thickness: ['t2', 't3'],
+  legsStyle: ['classic', 'cone', 'metal'],
+  legsHeight: ['h70', 'h75', 'h80'],
+  hardware: ['none', 'h1', 'h2', 'h3'],
+} as const;
 
 function OptionGroup({
   title,
@@ -69,6 +81,22 @@ export default function ConstructorSection() {
     setConfig(DEFAULT_CONFIG);
     setSubmitted(false);
     setGalleryIdx(0);
+  };
+
+  const applyFromSketch = (partial: Partial<Config>) => {
+    setConfig((prev) => {
+      const next = { ...prev };
+      (Object.keys(VALID) as (keyof typeof VALID)[]).forEach((key) => {
+        const val = partial[key];
+        if (val && (VALID[key] as readonly string[]).includes(val)) {
+          if (key === 'furniture') next.furniture = val as FurnitureType;
+          else (next[key] as string) = val;
+        }
+      });
+      return next;
+    });
+    setGalleryIdx(0);
+    document.querySelector('#constructor-3d')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
   const labelOf = (arr: Option[], id: string) => arr.find((o) => o.id === id)?.label ?? '';
@@ -132,7 +160,7 @@ export default function ConstructorSection() {
           {/* RIGHT — 3D + gallery + summary */}
           <div className="flex flex-col gap-6">
             {/* 3D Visualizer */}
-            <div className="bg-[#242424] relative overflow-hidden" style={{ height: 420 }}>
+            <div id="constructor-3d" className="bg-[#242424] relative overflow-hidden" style={{ height: 420 }}>
               <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
                 <span className="bg-[#1A1A1A] text-[#A0784A] font-montserrat font-700 text-[10px] uppercase tracking-widest px-3 py-1">
                   3D · крутите мышью
@@ -262,6 +290,11 @@ export default function ConstructorSection() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* AI Sketch → 3D */}
+        <div className="mt-8">
+          <SketchTool onApply={applyFromSketch} />
         </div>
       </div>
     </section>

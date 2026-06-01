@@ -7,6 +7,7 @@ import CatalogSection from '@/components/CatalogSection';
 import MaterialsSection from '@/components/MaterialsSection';
 import ContactsSection from '@/components/ContactsSection';
 import FooterSection from '@/components/FooterSection';
+import AIChatWidget from '@/components/AIChatWidget';
 
 export default function Index() {
   return (
@@ -20,6 +21,7 @@ export default function Index() {
       <MaterialsSection />
       <ContactsSection />
       <FooterSection />
+      <AIChatWidget />
     </div>
   );
 }

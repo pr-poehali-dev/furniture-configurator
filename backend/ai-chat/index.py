@@ -46,12 +46,12 @@ def handler(event, context):
             'body': json.dumps({'error': 'Method not allowed'}),
         }
 
-    api_key = os.environ.get('OPENAI_API_KEY')
+    api_key = os.environ.get('POLZA_AI_API_KEY')
     if not api_key:
         return {
             'statusCode': 500,
             'headers': {**cors_headers, 'Content-Type': 'application/json'},
-            'body': json.dumps({'error': 'OPENAI_API_KEY не настроен'}),
+            'body': json.dumps({'error': 'POLZA_AI_API_KEY не настроен'}),
         }
 
     try:
@@ -74,14 +74,14 @@ def handler(event, context):
     messages = [{'role': 'system', 'content': SYSTEM_PROMPT}] + clean
 
     payload = json.dumps({
-        'model': 'gpt-4o-mini',
+        'model': 'openai/gpt-4o-mini',
         'messages': messages,
         'temperature': 0.7,
         'max_tokens': 400,
     }).encode('utf-8')
 
     req = urllib.request.Request(
-        'https://api.openai.com/v1/chat/completions',
+        'https://api.polza.ai/api/v1/chat/completions',
         data=payload,
         headers={
             'Authorization': f'Bearer {api_key}',
@@ -99,7 +99,7 @@ def handler(event, context):
         return {
             'statusCode': 502,
             'headers': {**cors_headers, 'Content-Type': 'application/json'},
-            'body': json.dumps({'error': 'Ошибка OpenAI', 'detail': err_body[:300]}),
+            'body': json.dumps({'error': 'Ошибка ИИ-провайдера', 'detail': err_body[:300]}),
         }
     except Exception as e:
         return {
