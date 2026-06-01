@@ -11,12 +11,26 @@ const WELCOME: Msg = {
 
 const QUICK = ['Хочу обеденный стол', 'Нужен стеллаж в гостиную', 'Подберите тумбу у кровати'];
 
+function getSessionId() {
+  try {
+    let id = localStorage.getItem('artora_chat_session');
+    if (!id) {
+      id = `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+      localStorage.setItem('artora_chat_session', id);
+    }
+    return id;
+  } catch {
+    return `s_${Date.now().toString(36)}`;
+  }
+}
+
 export default function AIChatWidget() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([WELCOME]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const sessionId = useRef(getSessionId());
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -33,7 +47,10 @@ export default function AIChatWidget() {
       const res = await fetch(BACKEND.aiChat, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: next.filter((m) => m !== WELCOME || next.indexOf(m) !== 0) }),
+        body: JSON.stringify({
+          sessionId: sessionId.current,
+          messages: next.filter((m) => m !== WELCOME || next.indexOf(m) !== 0),
+        }),
       });
       const data = await res.json();
       if (res.ok && data.reply) {

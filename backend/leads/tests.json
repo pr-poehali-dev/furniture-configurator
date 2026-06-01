@@ -1,0 +1,25 @@
+{
+  "tests": [
+    {
+      "name": "CORS preflight",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Save constructor lead",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "source": "constructor",
+        "name": "Тест Тестов",
+        "phone": "+79990000000",
+        "config": { "furniture": "table", "material": "oak", "size": "m" },
+        "price": 28900
+      },
+      "expectedStatus": 200,
+      "expectedBody": { "ok": true },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

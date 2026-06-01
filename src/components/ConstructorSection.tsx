@@ -1,5 +1,6 @@
 import { useState, lazy, Suspense } from 'react';
 import Icon from '@/components/ui/icon';
+import { BACKEND } from '@/lib/backend';
 import {
   Config,
   DEFAULT_CONFIG,
@@ -70,6 +71,9 @@ export default function ConstructorSection() {
   const [submitted, setSubmitted] = useState(false);
   const [warm, setWarm] = useState(false);
   const [galleryIdx, setGalleryIdx] = useState(0);
+  const [showForm, setShowForm] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [lead, setLead] = useState({ name: '', phone: '' });
 
   const price = calcPrice(config);
   const set = (key: keyof Config) => (val: string) => {
@@ -80,7 +84,34 @@ export default function ConstructorSection() {
   const reset = () => {
     setConfig(DEFAULT_CONFIG);
     setSubmitted(false);
+    setShowForm(false);
+    setLead({ name: '', phone: '' });
     setGalleryIdx(0);
+  };
+
+  const submitLead = async () => {
+    if (!lead.name.trim() || !lead.phone.trim() || sending) return;
+    setSending(true);
+    try {
+      await fetch(BACKEND.leads, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: 'constructor',
+          name: lead.name,
+          phone: lead.phone,
+          config,
+          price,
+        }),
+      });
+      setSubmitted(true);
+      setShowForm(false);
+    } catch {
+      setSubmitted(true);
+      setShowForm(false);
+    } finally {
+      setSending(false);
+    }
   };
 
   const applyFromSketch = (partial: Partial<Config>) => {
@@ -273,10 +304,46 @@ export default function ConstructorSection() {
                   <p className="font-montserrat font-700 text-white text-sm">Заявка отправлена!</p>
                   <p className="font-opensans text-[#888] text-xs mt-1">Мы свяжемся с вами в течение 30 минут</p>
                 </div>
+              ) : showForm ? (
+                <div className="flex flex-col gap-3 animate-fade-in">
+                  <input
+                    value={lead.name}
+                    onChange={(e) => setLead((l) => ({ ...l, name: e.target.value }))}
+                    placeholder="Ваше имя"
+                    className="bg-white/5 border border-[#333] text-white px-4 py-3 font-opensans text-sm focus:outline-none focus:border-[#A0784A] transition placeholder:text-white/30"
+                  />
+                  <input
+                    value={lead.phone}
+                    onChange={(e) => setLead((l) => ({ ...l, phone: e.target.value }))}
+                    placeholder="Телефон"
+                    type="tel"
+                    className="bg-white/5 border border-[#333] text-white px-4 py-3 font-opensans text-sm focus:outline-none focus:border-[#A0784A] transition placeholder:text-white/30"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={submitLead}
+                      disabled={!lead.name.trim() || !lead.phone.trim() || sending}
+                      className="flex-1 bg-[#A0784A] hover:bg-[#8B4513] disabled:opacity-40 disabled:cursor-not-allowed text-white font-montserrat font-700 uppercase tracking-widest text-xs py-4 transition flex items-center justify-center gap-2"
+                    >
+                      {sending ? <Icon name="Loader" size={14} className="animate-spin" /> : <Icon name="Send" size={14} />}
+                      {sending ? 'Отправка...' : 'Отправить'}
+                    </button>
+                    <button
+                      onClick={() => setShowForm(false)}
+                      className="px-4 bg-white/10 hover:bg-white/20 text-white transition flex items-center justify-center"
+                      aria-label="Отмена"
+                    >
+                      <Icon name="X" size={16} />
+                    </button>
+                  </div>
+                  <p className="font-opensans text-white/30 text-[11px] text-center">
+                    Конфигурация и цена будут приложены к заявке автоматически
+                  </p>
+                </div>
               ) : (
                 <div className="flex flex-col sm:flex-row gap-3">
                   <button
-                    onClick={() => setSubmitted(true)}
+                    onClick={() => setShowForm(true)}
                     className="flex-1 bg-[#A0784A] hover:bg-[#8B4513] text-white font-montserrat font-700 uppercase tracking-widest text-xs py-4 transition-colors duration-200 flex items-center justify-center gap-2"
                   >
                     <Icon name="Send" size={14} />

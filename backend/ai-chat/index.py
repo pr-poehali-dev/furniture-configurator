@@ -3,6 +3,36 @@ import os
 import urllib.request
 import urllib.error
 
+import psycopg2
+
+
+def _save_conversation(session_id, messages, reply):
+    dsn = os.environ.get('DATABASE_URL')
+    if not dsn or not session_id:
+        return
+    try:
+        full = messages + [{'role': 'assistant', 'content': reply}]
+        payload = json.dumps(full, ensure_ascii=False)
+        conn = psycopg2.connect(dsn)
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM chat_conversations WHERE session_id = %s LIMIT 1", (session_id,))
+        row = cur.fetchone()
+        if row:
+            cur.execute(
+                "UPDATE chat_conversations SET messages = %s, updated_at = now() WHERE id = %s",
+                (payload, row[0]),
+            )
+        else:
+            cur.execute(
+                "INSERT INTO chat_conversations (session_id, messages) VALUES (%s, %s)",
+                (session_id, payload),
+            )
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception:
+        pass
+
 SYSTEM_PROMPT = '''Ты — Артур, дружелюбный ИИ-консультант мебельной фабрики ARTORA.
 Твоя задача — помочь клиенту собрать мебель его мечты через наводящие вопросы.
 Веди диалог тепло и профессионально, на русском языке. Отвечай коротко (2-4 предложения).
@@ -59,6 +89,7 @@ def handler(event, context):
     except json.JSONDecodeError:
         body = {}
 
+    session_id = str(body.get('sessionId', ''))[:64]
     user_messages = body.get('messages', [])
     if not isinstance(user_messages, list):
         user_messages = []
@@ -107,6 +138,8 @@ def handler(event, context):
             'headers': {**cors_headers, 'Content-Type': 'application/json'},
             'body': json.dumps({'error': str(e)[:300]}),
         }
+
+    _save_conversation(session_id, clean, reply)
 
     return {
         'statusCode': 200,
