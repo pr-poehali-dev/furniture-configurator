@@ -17,6 +17,7 @@ import {
   FurnitureType,
 } from './constructor/types';
 import SketchTool from './constructor/SketchTool';
+import RoomTryOn from './constructor/RoomTryOn';
 
 const Scene3D = lazy(() => import('./constructor/Scene3D'));
 
@@ -463,9 +464,10 @@ export default function ConstructorSection() {
           </div>
         </div>
 
-        {/* AI Sketch → 3D */}
-        <div className="mt-8">
+        {/* Tools: Sketch → 3D + Room try-on */}
+        <div className="mt-8 grid lg:grid-cols-2 gap-8">
           <SketchTool onApply={applyFromSketch} />
+          <RoomTryOn config={config} warm={warm} />
         </div>
       </div>
     </section>

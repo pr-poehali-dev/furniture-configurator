@@ -21,10 +21,12 @@ export default function Scene3D({
   config,
   warm,
   onReady,
+  transparent = false,
 }: {
   config: Config;
   warm: boolean;
   onReady?: (fn: () => string) => void;
+  transparent?: boolean;
 }) {
   return (
     <Canvas
@@ -34,6 +36,7 @@ export default function Scene3D({
       gl={{
         antialias: true,
         preserveDrawingBuffer: true,
+        alpha: transparent,
         toneMapping: THREE.ACESFilmicToneMapping,
         toneMappingExposure: warm ? 1.05 : 1.15,
       }}
@@ -41,9 +44,13 @@ export default function Scene3D({
       <CaptureBridge onReady={onReady} />
       <SoftShadows size={28} samples={16} focus={0.9} />
 
-      {/* gradient backdrop */}
-      <color attach="background" args={[warm ? '#26201b' : '#202225']} />
-      <fog attach="fog" args={[warm ? '#26201b' : '#202225', 9, 16]} />
+      {/* backdrop — skipped in transparent (try-on) mode */}
+      {!transparent && (
+        <>
+          <color attach="background" args={[warm ? '#26201b' : '#202225']} />
+          <fog attach="fog" args={[warm ? '#26201b' : '#202225', 9, 16]} />
+        </>
+      )}
 
       {/* Key light */}
       <ambientLight intensity={warm ? 0.35 : 0.45} color={warm ? '#ffe2bd' : '#ffffff'} />
@@ -73,17 +80,19 @@ export default function Scene3D({
           </group>
         </Center>
 
-        {/* studio floor for grounding + subtle reflection */}
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.43, 0]} receiveShadow>
-          <planeGeometry args={[40, 40]} />
-          <meshStandardMaterial color={warm ? '#1d1813' : '#1a1c1e'} roughness={0.75} metalness={0.15} />
-        </mesh>
+        {/* studio floor for grounding + subtle reflection (hidden in try-on) */}
+        {!transparent && (
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.43, 0]} receiveShadow>
+            <planeGeometry args={[40, 40]} />
+            <meshStandardMaterial color={warm ? '#1d1813' : '#1a1c1e'} roughness={0.75} metalness={0.15} />
+          </mesh>
+        )}
 
         <ContactShadows
           position={[0, -1.42, 0]}
-          opacity={0.7}
+          opacity={transparent ? 0.45 : 0.7}
           scale={11}
-          blur={2.8}
+          blur={transparent ? 3.4 : 2.8}
           far={4.5}
           resolution={1024}
           color="#000000"
@@ -97,7 +106,7 @@ export default function Scene3D({
         maxDistance={7}
         minPolarAngle={0.2}
         maxPolarAngle={Math.PI / 2.05}
-        autoRotate
+        autoRotate={!transparent}
         autoRotateSpeed={0.55}
         enableDamping
         dampingFactor={0.08}
