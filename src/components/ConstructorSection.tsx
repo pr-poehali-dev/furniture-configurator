@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from 'react';
+import { useState, lazy, Suspense, useRef } from 'react';
 import Icon from '@/components/ui/icon';
 import { BACKEND } from '@/lib/backend';
 import {
@@ -74,6 +74,8 @@ export default function ConstructorSection() {
   const [showForm, setShowForm] = useState(false);
   const [sending, setSending] = useState(false);
   const [lead, setLead] = useState({ name: '', phone: '' });
+  const [exporting, setExporting] = useState(false);
+  const captureRef = useRef<(() => string) | null>(null);
 
   const price = calcPrice(config);
   const set = (key: keyof Config) => (val: string) => {
@@ -132,6 +134,100 @@ export default function ConstructorSection() {
 
   const labelOf = (arr: Option[], id: string) => arr.find((o) => o.id === id)?.label ?? '';
   const gallery = GALLERY[config.furniture];
+
+  const exportImage = async () => {
+    if (!captureRef.current || exporting) return;
+    setExporting(true);
+    try {
+      const shot = captureRef.current();
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = shot;
+      });
+
+      const W = 1280;
+      const H = 960;
+      const canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext('2d')!;
+
+      // background
+      ctx.fillStyle = '#1A1A1A';
+      ctx.fillRect(0, 0, W, H);
+
+      // render area for 3D shot (keep aspect, contain)
+      const padTop = 96;
+      const areaH = 660;
+      const ratio = img.width / img.height;
+      let dw = W - 120;
+      let dh = dw / ratio;
+      if (dh > areaH) {
+        dh = areaH;
+        dw = dh * ratio;
+      }
+      const dx = (W - dw) / 2;
+      ctx.drawImage(img, dx, padTop + (areaH - dh) / 2, dw, dh);
+
+      // header
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 44px Montserrat, sans-serif';
+      ctx.textBaseline = 'top';
+      ctx.fillText('ARTORA', 60, 44);
+      ctx.fillStyle = '#A0784A';
+      ctx.font = '700 16px Montserrat, sans-serif';
+      ctx.fillText('МЕБЕЛЬ НА ЗАКАЗ · ВАША КОНФИГУРАЦИЯ', 60, 92);
+
+      // bottom spec bar
+      const barY = padTop + areaH + 24;
+      ctx.fillStyle = '#242424';
+      ctx.fillRect(60, barY, W - 120, 140);
+
+      const specs = [
+        ['Предмет', FURNITURE_TYPES.find((f) => f.id === config.furniture)?.label ?? ''],
+        ['Материал', labelOf(MATERIALS, config.material)],
+        ['Размер', `${labelOf(SIZES, config.size)} см`],
+        ['Толщина', labelOf(THICKNESS, config.thickness)],
+        ['Ножки', labelOf(LEGS_STYLE, config.legsStyle)],
+        ['Фурнитура', labelOf(HARDWARE, config.hardware)],
+      ];
+      const colW = (W - 160) / 3;
+      specs.forEach((s, i) => {
+        const col = i % 3;
+        const row = Math.floor(i / 3);
+        const sx = 90 + col * colW;
+        const sy = barY + 28 + row * 52;
+        ctx.fillStyle = '#777';
+        ctx.font = '700 13px Montserrat, sans-serif';
+        ctx.fillText(s[0].toUpperCase(), sx, sy);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '600 20px "Open Sans", sans-serif';
+        ctx.fillText(s[1], sx, sy + 18);
+      });
+
+      // price (right side of header)
+      const priceStr = `${price.toLocaleString('ru')} ₽`;
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#D2B48C';
+      ctx.font = '900 40px Montserrat, sans-serif';
+      ctx.fillText(priceStr, W - 60, 50);
+      ctx.fillStyle = '#777';
+      ctx.font = '700 13px Montserrat, sans-serif';
+      ctx.fillText('ИТОГОВАЯ СТОИМОСТЬ', W - 60, 96);
+      ctx.textAlign = 'left';
+
+      const link = document.createElement('a');
+      link.download = `artora-${config.furniture}-${Date.now()}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch {
+      /* ignore */
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <section id="constructor" className="py-24 lg:py-32 bg-[#1A1A1A]">
@@ -214,6 +310,14 @@ export default function ConstructorSection() {
                 >
                   <Icon name="Lamp" size={14} />
                 </button>
+                <button
+                  onClick={exportImage}
+                  disabled={exporting}
+                  className="p-2 transition bg-[#A0784A] text-white hover:bg-[#8B4513] disabled:opacity-50"
+                  title="Скачать визуализацию"
+                >
+                  <Icon name={exporting ? 'Loader' : 'Download'} size={14} className={exporting ? 'animate-spin' : ''} />
+                </button>
               </div>
 
               <Suspense
@@ -226,7 +330,7 @@ export default function ConstructorSection() {
                   </div>
                 }
               >
-                <Scene3D config={config} warm={warm} />
+                <Scene3D config={config} warm={warm} onReady={(fn) => (captureRef.current = fn)} />
               </Suspense>
 
               <div className="absolute bottom-4 left-4 text-white/50 font-montserrat text-[10px] uppercase tracking-wider pointer-events-none">

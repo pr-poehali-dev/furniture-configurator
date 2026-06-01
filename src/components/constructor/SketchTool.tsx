@@ -31,9 +31,10 @@ async function pdfToImage(file: File): Promise<string> {
 
 type Tool = 'curve' | 'line' | 'erase';
 
-const CW = 600;
-const CH = 400;
-const PX_PER_CM = 20; // 1 см = 20px → холст 30×20 см
+const PX_PER_CM = 5; // 1 см = 5px
+const CM_SIZE = 120; // холст 120×120 см
+const CW = CM_SIZE * PX_PER_CM; // 600px
+const CH = CM_SIZE * PX_PER_CM; // 600px
 
 type Pt = { x: number; y: number };
 type Stroke = { tool: 'curve' | 'line'; points: Pt[]; size: number };
@@ -56,35 +57,34 @@ export default function SketchTool({ onApply }: { onApply: (config: Partial<Conf
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, CW, CH);
-    // mm grid (light) — каждые 2px пропустим, рисуем по 4px = 0.2см мелкая
     ctx.lineWidth = 1;
-    // minor lines every 0.5 cm
+    // minor lines every 5 см
     ctx.strokeStyle = '#eef1e9';
-    for (let x = 0; x <= CW; x += PX_PER_CM / 2) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
-    }
-    for (let y = 0; y <= CH; y += PX_PER_CM / 2) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
-    }
-    // major lines every 1 cm
-    ctx.strokeStyle = '#dce3d4';
-    for (let x = 0; x <= CW; x += PX_PER_CM) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
-    }
-    for (let y = 0; y <= CH; y += PX_PER_CM) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
-    }
-    // 5cm bold guides + labels
-    ctx.strokeStyle = '#c2cdb4';
-    ctx.fillStyle = '#9aa888';
-    ctx.font = '10px Montserrat, sans-serif';
     for (let x = 0; x <= CW; x += PX_PER_CM * 5) {
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
-      if (x > 0) ctx.fillText(`${x / PX_PER_CM}`, x + 2, 11);
     }
     for (let y = 0; y <= CH; y += PX_PER_CM * 5) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
-      if (y > 0) ctx.fillText(`${y / PX_PER_CM}`, 2, y - 2);
+    }
+    // major lines every 10 см
+    ctx.strokeStyle = '#dce3d4';
+    for (let x = 0; x <= CW; x += PX_PER_CM * 10) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+    }
+    for (let y = 0; y <= CH; y += PX_PER_CM * 10) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+    }
+    // bold guides + labels every 20 см
+    ctx.strokeStyle = '#c2cdb4';
+    ctx.fillStyle = '#9aa888';
+    ctx.font = '10px Montserrat, sans-serif';
+    for (let x = 0; x <= CW; x += PX_PER_CM * 20) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+      if (x > 0) ctx.fillText(`${x / PX_PER_CM}`, x + 3, 12);
+    }
+    for (let y = 0; y <= CH; y += PX_PER_CM * 20) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+      if (y > 0) ctx.fillText(`${y / PX_PER_CM}`, 3, y - 3);
     }
   }, []);
 
@@ -351,7 +351,7 @@ export default function SketchTool({ onApply }: { onApply: (config: Partial<Conf
             />
             {/* scale badge */}
             <div className="absolute bottom-2 right-2 bg-[#1A1A1A]/80 text-white font-montserrat text-[10px] uppercase tracking-widest px-2 py-1 pointer-events-none">
-              Сетка 1×1 см · {CW / PX_PER_CM}×{CH / PX_PER_CM} см
+              Поле {CW / PX_PER_CM}×{CH / PX_PER_CM} см · клетка 5 см
             </div>
             {liveLen && (
               <div
@@ -364,7 +364,7 @@ export default function SketchTool({ onApply }: { onApply: (config: Partial<Conf
             {!hasDrawing && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <span className="font-opensans text-[#bbb] text-sm bg-white/70 px-3 py-1 rounded">
-                  Рисуйте по сетке: каждая клетка = 1 см
+                  Рисуйте по сетке: поле 120×120 см, клетка = 5 см
                 </span>
               </div>
             )}

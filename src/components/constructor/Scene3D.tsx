@@ -1,11 +1,31 @@
-import { Suspense } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Suspense, useEffect } from 'react';
+import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, ContactShadows, Environment, Center, SoftShadows } from '@react-three/drei';
 import * as THREE from 'three';
 import FurnitureModels from './FurnitureModels';
 import type { Config } from './types';
 
-export default function Scene3D({ config, warm }: { config: Config; warm: boolean }) {
+function CaptureBridge({ onReady }: { onReady?: (fn: () => string) => void }) {
+  const { gl, scene, camera } = useThree();
+  useEffect(() => {
+    if (!onReady) return;
+    onReady(() => {
+      gl.render(scene, camera);
+      return gl.domElement.toDataURL('image/png');
+    });
+  }, [gl, scene, camera, onReady]);
+  return null;
+}
+
+export default function Scene3D({
+  config,
+  warm,
+  onReady,
+}: {
+  config: Config;
+  warm: boolean;
+  onReady?: (fn: () => string) => void;
+}) {
   return (
     <Canvas
       shadows="soft"
@@ -18,6 +38,7 @@ export default function Scene3D({ config, warm }: { config: Config; warm: boolea
         toneMappingExposure: warm ? 1.05 : 1.15,
       }}
     >
+      <CaptureBridge onReady={onReady} />
       <SoftShadows size={28} samples={16} focus={0.9} />
 
       {/* gradient backdrop */}
