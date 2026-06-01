@@ -51,6 +51,57 @@ function useLegMaterial(legsStyle: string, material: string) {
   }, [legsStyle, material]);
 }
 
+function useHardwareMaterial(hardware: string, material: string) {
+  return useMemo(() => {
+    const color = HARDWARE_COLOR[hardware] ?? '#888';
+    if (hardware === 'h3') {
+      const tex = makeWoodTexture(MATERIAL_TO_WOOD[material] === 'white' ? 'oak' : (MATERIAL_TO_WOOD[material] ?? 'oak'));
+      return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5, metalness: 0.05 });
+    }
+    return new THREE.MeshStandardMaterial({
+      color,
+      roughness: hardware === 'h1' ? 0.25 : 0.4,
+      metalness: 0.9,
+    });
+  }, [hardware, material]);
+}
+
+/* A single drawer/cabinet pull (knob or bar handle) facing +Z */
+function Handle({
+  x,
+  y,
+  z,
+  material,
+  bar,
+}: {
+  x: number;
+  y: number;
+  z: number;
+  material: THREE.Material;
+  bar: boolean;
+}) {
+  if (bar) {
+    return (
+      <group position={[x, y, z]}>
+        <mesh castShadow position={[0, 0, 0.05]} material={material}>
+          <boxGeometry args={[0.32, 0.035, 0.035]} />
+        </mesh>
+        <mesh material={material} position={[-0.13, 0, 0.025]}>
+          <boxGeometry args={[0.03, 0.03, 0.05]} />
+        </mesh>
+        <mesh material={material} position={[0.13, 0, 0.025]}>
+          <boxGeometry args={[0.03, 0.03, 0.05]} />
+        </mesh>
+      </group>
+    );
+  }
+  return (
+    <mesh castShadow position={[x, y, z + 0.04]} material={material}>
+      <sphereGeometry args={[0.05, 20, 20]} />
+    </mesh>
+  );
+}
+
 /* ---------------- TABLE ---------------- */
 function TableModel({ config }: { config: Config }) {
   const [w, d] = SIZE_SCALE[config.size] ?? SIZE_SCALE.m;
@@ -58,6 +109,9 @@ function TableModel({ config }: { config: Config }) {
   const h = LEG_HEIGHT[config.legsHeight] ?? 1.5;
   const top = useWoodMaterial(config.material);
   const legMat = useLegMaterial(config.legsStyle, config.material);
+  const hwMat = useHardwareMaterial(config.hardware, config.material);
+  const hasHw = config.hardware !== 'none';
+  const barHandle = config.hardware === 'h2' || config.hardware === 'h3';
 
   const legPositions: [number, number][] = [
     [w / 2 - 0.15, d / 2 - 0.15],
@@ -66,7 +120,7 @@ function TableModel({ config }: { config: Config }) {
     [-w / 2 + 0.15, -d / 2 + 0.15],
   ];
 
-  const legGeom = (i: number) => {
+  const legGeom = () => {
     if (config.legsStyle === 'cone') {
       return <cylinderGeometry args={[0.04, 0.09, h, 24]} />;
     }
@@ -76,16 +130,29 @@ function TableModel({ config }: { config: Config }) {
     return <boxGeometry args={[0.12, h, 0.12]} />;
   };
 
+  const drawerH = 0.22;
+  const drawerY = h - drawerH / 2 - 0.02;
+
   return (
     <group position={[0, 0, 0]}>
       {/* tabletop */}
       <mesh castShadow receiveShadow position={[0, h + thickness / 2, 0]} material={top}>
         <boxGeometry args={[w, thickness, d]} />
       </mesh>
+
+      {/* drawer apron under the top (front-facing +Z) */}
+      <mesh castShadow position={[0, drawerY, d / 2 - 0.06]} material={top}>
+        <boxGeometry args={[w * 0.55, drawerH, 0.05]} />
+      </mesh>
+      {/* drawer handle */}
+      {hasHw && (
+        <Handle x={0} y={drawerY} z={d / 2 - 0.035} material={hwMat} bar={barHandle} />
+      )}
+
       {/* legs */}
       {legPositions.map(([x, z], i) => (
         <mesh key={i} castShadow position={[x, h / 2, z]} material={legMat}>
-          {legGeom(i)}
+          {legGeom()}
         </mesh>
       ))}
     </group>
@@ -101,6 +168,9 @@ function ShelfModel({ config }: { config: Config }) {
   const thickness = config.thickness === 't3' ? 0.1 : 0.07;
   const wood = useWoodMaterial(config.material);
   const frameMat = useLegMaterial(config.legsStyle, config.material);
+  const hwMat = useHardwareMaterial(config.hardware, config.material);
+  const hasHw = config.hardware !== 'none';
+  const barHandle = config.hardware === 'h2' || config.hardware === 'h3';
   const shelfCount = 4;
 
   const shelves = Array.from({ length: shelfCount }, (_, i) => {
@@ -119,6 +189,12 @@ function ShelfModel({ config }: { config: Config }) {
     [-width / 2, -depth / 2 + 0.04],
   ];
 
+  // bottom closed section height (between shelf 0 and shelf 1)
+  const sectionTop = (1 / (shelfCount - 1)) * height;
+  const doorH = sectionTop - thickness;
+  const doorY = thickness / 2 + doorH / 2;
+  const doorW = width / 2 - 0.04;
+
   return (
     <group position={[0, 0, 0]}>
       {shelves}
@@ -130,6 +206,24 @@ function ShelfModel({ config }: { config: Config }) {
             <boxGeometry args={[0.08, height + thickness, 0.08]} />
           )}
         </mesh>
+      ))}
+
+      {/* two doors on the bottom section */}
+      {[-1, 1].map((dir) => (
+        <group key={dir}>
+          <mesh castShadow position={[dir * (doorW / 2 + 0.01), doorY, depth / 2 - 0.02]} material={wood}>
+            <boxGeometry args={[doorW, doorH, 0.04]} />
+          </mesh>
+          {hasHw && (
+            <Handle
+              x={dir * 0.06}
+              y={doorY}
+              z={depth / 2}
+              material={hwMat}
+              bar={barHandle}
+            />
+          )}
+        </group>
       ))}
     </group>
   );
@@ -143,12 +237,9 @@ function NightstandModel({ config }: { config: Config }) {
   const h = (LEG_HEIGHT[config.legsHeight] ?? 1.5) * 0.25;
   const body = useWoodMaterial(config.material);
   const legMat = useLegMaterial(config.legsStyle, config.material);
-  const hwColor = HARDWARE_COLOR[config.hardware] ?? '#888';
-
-  const hwMat = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: hwColor, roughness: 0.3, metalness: config.hardware === 'h3' ? 0.1 : 0.8 }),
-    [hwColor, config.hardware]
-  );
+  const hwMat = useHardwareMaterial(config.hardware, config.material);
+  const hasHw = config.hardware !== 'none';
+  const barHandle = config.hardware === 'h2' || config.hardware === 'h3';
 
   const legPositions: [number, number][] = [
     [width / 2 - 0.12, depth / 2 - 0.12],
@@ -164,18 +255,14 @@ function NightstandModel({ config }: { config: Config }) {
         <boxGeometry args={[width, height, depth]} />
       </mesh>
       {/* drawer line */}
-      <mesh position={[0, h + height * 0.72, depth / 2 + 0.001]} material={body}>
-        <boxGeometry args={[width * 0.92, 0.02, 0.02]} />
+      <mesh position={[0, h + height * 0.55, depth / 2 + 0.001]} material={body}>
+        <boxGeometry args={[width * 0.92, 0.015, 0.02]} />
       </mesh>
-      {/* handles */}
-      {config.hardware !== 'none' && (
+      {/* handles on two drawers */}
+      {hasHw && (
         <>
-          <mesh position={[0, h + height * 0.85, depth / 2 + 0.04]} material={hwMat}>
-            <boxGeometry args={[0.3, 0.04, 0.04]} />
-          </mesh>
-          <mesh position={[0, h + height * 0.35, depth / 2 + 0.04]} material={hwMat}>
-            <boxGeometry args={[0.3, 0.04, 0.04]} />
-          </mesh>
+          <Handle x={0} y={h + height * 0.78} z={depth / 2} material={hwMat} bar={barHandle} />
+          <Handle x={0} y={h + height * 0.28} z={depth / 2} material={hwMat} bar={barHandle} />
         </>
       )}
       {/* legs */}
