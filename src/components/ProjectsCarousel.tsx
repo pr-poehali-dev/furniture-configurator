@@ -32,17 +32,31 @@ const projects = [
   },
   {
     id: 5,
-    title: 'Консоль «Ясень»',
-    price: 'от 16 800 ₽',
-    tag: 'Классика',
-    img: 'https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/385d599c-9784-4c7d-910a-e11d258dc978.jpg',
+    title: 'Диван «Осло»',
+    price: 'от 64 900 ₽',
+    tag: 'Скандинавский',
+    img: 'https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/4b29095e-bf24-4d0f-86af-59497df8adc2.jpg',
   },
   {
     id: 6,
-    title: 'Барная стойка «Металл»',
-    price: 'от 41 000 ₽',
+    title: 'Шкаф-купе «Модерн»',
+    price: 'от 54 200 ₽',
+    tag: 'Минимализм',
+    img: 'https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/57fce72f-e06d-49a9-bc63-b3491789da26.jpg',
+  },
+  {
+    id: 7,
+    title: 'Кухня «Альпина»',
+    price: 'от 128 000 ₽',
+    tag: 'Классика',
+    img: 'https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/b2ca5be4-9537-47bb-a101-d1cc23821a30.jpg',
+  },
+  {
+    id: 8,
+    title: 'Кровать «Хюгге»',
+    price: 'от 48 900 ₽',
     tag: 'Лофт',
-    img: 'https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/86871e1d-0fab-4391-9443-4bb449e9ce29.jpg',
+    img: 'https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/165ae52f-be20-4ba5-a8b0-2e4a02d80084.jpg',
   },
 ];
 
