@@ -76,6 +76,7 @@ export default function ConstructorSection() {
   const [sending, setSending] = useState(false);
   const [lead, setLead] = useState({ name: '', phone: '' });
   const [exporting, setExporting] = useState(false);
+  const [tab, setTab] = useState<'build' | 'tryon'>('build');
   const captureRef = useRef<(() => string) | null>(null);
 
   const price = calcPrice(config);
@@ -233,16 +234,52 @@ export default function ConstructorSection() {
   return (
     <section id="constructor" className="py-24 lg:py-32 bg-[#1A1A1A]">
       <div className="max-w-7xl mx-auto px-6 lg:px-12">
-        <div className="mb-10">
-          <span className="section-label text-[#A0784A]">Интерактивный 3D-конструктор</span>
+        <div className="mb-8">
+          <span className="section-label text-[#A0784A]">Подбор мебели · 3D</span>
           <h2 className="font-montserrat font-900 text-white text-4xl lg:text-5xl mt-3 leading-tight">
-            Собери свою мебель
+            {tab === 'build' ? 'Собери свою мебель' : 'Примерь мебель в помещении'}
           </h2>
-          <p className="font-opensans text-white/50 text-sm mt-3 max-w-lg">
-            Выбирай предмет, материал и фурнитуру — крути модель мышкой, цена считается мгновенно.
+          <p className="font-opensans text-white/50 text-sm mt-3 max-w-xl">
+            {tab === 'build'
+              ? 'Выбирай предмет, размеры, цвет и фактуру — крути 3D-модель мышкой, цена считается мгновенно.'
+              : 'Загрузи фото комнаты, офиса или другого помещения — собранная мебель встанет в кадр в реальном масштабе.'}
           </p>
         </div>
 
+        {/* Two main blocks switch */}
+        <div className="grid sm:grid-cols-2 gap-3 mb-10">
+          {([
+            { id: 'build', icon: 'SlidersHorizontal', title: 'Конструктор мебели', desc: 'Геометрия, цвет, фактура и фурнитура' },
+            { id: 'tryon', icon: 'Layers', title: 'Примерка в помещении', desc: 'Подбор мебели на фото вашей комнаты или офиса' },
+          ] as const).map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`text-left p-5 border transition-all duration-200 flex items-start gap-4 ${
+                tab === t.id
+                  ? 'bg-white border-white'
+                  : 'border-white/15 hover:border-[#A0784A]'
+              }`}
+            >
+              <div className={`w-11 h-11 flex items-center justify-center flex-shrink-0 ${tab === t.id ? 'bg-[#A0784A] text-white' : 'bg-white/10 text-[#A0784A]'}`}>
+                <Icon name={t.icon} size={20} />
+              </div>
+              <div>
+                <p className={`font-montserrat font-700 text-sm uppercase tracking-widest ${tab === t.id ? 'text-[#1A1A1A]' : 'text-white'}`}>
+                  {t.title}
+                </p>
+                <p className={`font-opensans text-xs mt-1 ${tab === t.id ? 'text-[#666]' : 'text-white/45'}`}>
+                  {t.desc}
+                </p>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {tab === 'tryon' ? (
+          <RoomTryOn config={config} warm={warm} />
+        ) : (
+        <>
         {/* Furniture type switch */}
         <div className="flex flex-wrap gap-2 mb-8">
           {FURNITURE_TYPES.map((f) => (
@@ -464,11 +501,12 @@ export default function ConstructorSection() {
           </div>
         </div>
 
-        {/* Tools: Sketch → 3D + Room try-on */}
-        <div className="mt-8 grid lg:grid-cols-2 gap-8">
+        {/* Sketch → 3D helper */}
+        <div className="mt-8">
           <SketchTool onApply={applyFromSketch} />
-          <RoomTryOn config={config} warm={warm} />
         </div>
+        </>
+        )}
       </div>
     </section>
   );
