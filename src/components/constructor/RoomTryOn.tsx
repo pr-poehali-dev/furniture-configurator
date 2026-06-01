@@ -6,16 +6,19 @@ const Scene3D = lazy(() => import('./Scene3D'));
 
 type Placement = { x: number; y: number; scale: number };
 
+const DEFAULT_PLACEMENT: Placement = { x: 50, y: 58, scale: 1 };
+
+// preset — точка на полу по центру помещения + подходящий масштаб мебели
 const ROOM_LIBRARY = [
-  { id: 'living', label: 'Гостиная', src: 'https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/bc7f4ba9-3c87-4750-b81b-1b889463d3bd.jpg' },
-  { id: 'bedroom', label: 'Спальня', src: 'https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/f8deafea-42fa-4588-9d75-b530b1ee536f.jpg' },
-  { id: 'kitchen', label: 'Кухня', src: 'https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/3adab72a-4962-43fe-9e14-8a640effcfef.jpg' },
-  { id: 'office', label: 'Офис', src: 'https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/c1663dac-a11c-4cfe-af43-d796ddd6b20a.jpg' },
+  { id: 'living', label: 'Гостиная', src: 'https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/bc7f4ba9-3c87-4750-b81b-1b889463d3bd.jpg', preset: { x: 50, y: 66, scale: 1.02 } },
+  { id: 'bedroom', label: 'Спальня', src: 'https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/f8deafea-42fa-4588-9d75-b530b1ee536f.jpg', preset: { x: 50, y: 70, scale: 0.92 } },
+  { id: 'kitchen', label: 'Кухня', src: 'https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/3adab72a-4962-43fe-9e14-8a640effcfef.jpg', preset: { x: 50, y: 64, scale: 0.86 } },
+  { id: 'office', label: 'Офис', src: 'https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/c1663dac-a11c-4cfe-af43-d796ddd6b20a.jpg', preset: { x: 50, y: 68, scale: 0.96 } },
 ];
 
 export default function RoomTryOn({ config, warm }: { config: Config; warm: boolean }) {
   const [bg, setBg] = useState<string | null>(null);
-  const [placement, setPlacement] = useState<Placement>({ x: 50, y: 58, scale: 1 });
+  const [placement, setPlacement] = useState<Placement>(DEFAULT_PLACEMENT);
   const [shadow, setShadow] = useState(0.35);
   const [exporting, setExporting] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -28,8 +31,16 @@ export default function RoomTryOn({ config, warm }: { config: Config; warm: bool
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => setBg(reader.result as string);
+    reader.onload = () => {
+      setPlacement(DEFAULT_PLACEMENT);
+      setBg(reader.result as string);
+    };
     reader.readAsDataURL(file);
+  };
+
+  const selectRoom = (src: string, preset: Placement) => {
+    setPlacement(preset);
+    setBg(src);
   };
 
   // drag the furniture overlay
@@ -120,7 +131,7 @@ export default function RoomTryOn({ config, warm }: { config: Config; warm: bool
             {ROOM_LIBRARY.map((room) => (
               <button
                 key={room.id}
-                onClick={() => setBg(room.src)}
+                onClick={() => selectRoom(room.src, room.preset)}
                 className="group relative overflow-hidden rounded-sm aspect-[4/3] border border-white/10 hover:border-[#A0784A] transition"
               >
                 <img
