@@ -6,6 +6,13 @@ const Scene3D = lazy(() => import('./Scene3D'));
 
 type Placement = { x: number; y: number; scale: number };
 
+const ROOM_LIBRARY = [
+  { id: 'living', label: 'Гостиная', src: 'https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/bc7f4ba9-3c87-4750-b81b-1b889463d3bd.jpg' },
+  { id: 'bedroom', label: 'Спальня', src: 'https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/f8deafea-42fa-4588-9d75-b530b1ee536f.jpg' },
+  { id: 'kitchen', label: 'Кухня', src: 'https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/3adab72a-4962-43fe-9e14-8a640effcfef.jpg' },
+  { id: 'office', label: 'Офис', src: 'https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/c1663dac-a11c-4cfe-af43-d796ddd6b20a.jpg' },
+];
+
 export default function RoomTryOn({ config, warm }: { config: Config; warm: boolean }) {
   const [bg, setBg] = useState<string | null>(null);
   const [placement, setPlacement] = useState<Placement>({ x: 50, y: 58, scale: 1 });
@@ -51,6 +58,7 @@ export default function RoomTryOn({ config, warm }: { config: Config; warm: bool
     try {
       const furnitureShot = captureRef.current();
       const bgImg = new Image();
+      bgImg.crossOrigin = 'anonymous';
       const fImg = new Image();
       await Promise.all([
         new Promise((res, rej) => { bgImg.onload = res; bgImg.onerror = rej; bgImg.src = bg; }),
@@ -100,18 +108,43 @@ export default function RoomTryOn({ config, warm }: { config: Config; warm: bool
         </h3>
       </div>
       <p className="font-opensans text-white/50 text-xs mb-5">
-        Загрузите фото комнаты — мебель встанет поверх. Двигайте, масштабируйте, крутите мышью и скачайте результат.
+        Выберите готовое помещение или загрузите фото своего — мебель встанет в кадр. Двигайте, масштабируйте, крутите мышью и скачайте результат.
       </p>
 
       {!bg ? (
-        <label className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-white/20 hover:border-[#A0784A] transition cursor-pointer py-20 rounded-sm">
-          <Icon name="ImageUp" size={32} className="text-[#A0784A]" />
-          <span className="font-montserrat font-700 text-white/70 text-xs uppercase tracking-widest">
-            Загрузить фото комнаты
-          </span>
-          <span className="font-opensans text-white/40 text-xs">JPG, PNG — ваш интерьер</span>
-          <input type="file" accept="image/*" onChange={onUpload} className="hidden" />
-        </label>
+        <div>
+          <p className="font-montserrat text-[10px] uppercase tracking-widest text-white/40 mb-3">
+            Готовые помещения
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+            {ROOM_LIBRARY.map((room) => (
+              <button
+                key={room.id}
+                onClick={() => setBg(room.src)}
+                className="group relative overflow-hidden rounded-sm aspect-[4/3] border border-white/10 hover:border-[#A0784A] transition"
+              >
+                <img
+                  src={room.src}
+                  alt={room.label}
+                  loading="lazy"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+                <span className="absolute bottom-1.5 left-2 font-montserrat font-700 text-white text-[10px] uppercase tracking-widest">
+                  {room.label}
+                </span>
+              </button>
+            ))}
+          </div>
+          <label className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-white/20 hover:border-[#A0784A] transition cursor-pointer py-10 rounded-sm">
+            <Icon name="ImageUp" size={28} className="text-[#A0784A]" />
+            <span className="font-montserrat font-700 text-white/70 text-xs uppercase tracking-widest">
+              Или загрузите фото своего помещения
+            </span>
+            <span className="font-opensans text-white/40 text-xs">JPG, PNG — квартира, офис и др.</span>
+            <input type="file" accept="image/*" onChange={onUpload} className="hidden" />
+          </label>
+        </div>
       ) : (
         <>
           {/* Stage */}
@@ -183,11 +216,13 @@ export default function RoomTryOn({ config, warm }: { config: Config; warm: bool
               <Icon name={exporting ? 'Loader' : 'Download'} size={14} className={exporting ? 'animate-spin' : ''} />
               {exporting ? 'Готовим...' : 'Скачать результат'}
             </button>
-            <label className="flex-1 cursor-pointer bg-white/10 hover:bg-white/20 text-white font-montserrat font-700 uppercase tracking-widest text-xs py-4 transition flex items-center justify-center gap-2">
+            <button
+              onClick={() => setBg(null)}
+              className="flex-1 bg-white/10 hover:bg-white/20 text-white font-montserrat font-700 uppercase tracking-widest text-xs py-4 transition flex items-center justify-center gap-2"
+            >
               <Icon name="RefreshCw" size={14} />
-              Другое фото
-              <input type="file" accept="image/*" onChange={onUpload} className="hidden" />
-            </label>
+              Сменить помещение
+            </button>
           </div>
         </>
       )}
