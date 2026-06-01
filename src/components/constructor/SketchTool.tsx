@@ -11,6 +11,24 @@ function labelOf(arr: { id: string; label: string }[], id?: string) {
   return arr.find((o) => o.id === id)?.label ?? '—';
 }
 
+async function pdfToImage(file: File): Promise<string> {
+  const pdfjs = await import('pdfjs-dist');
+  // worker from CDN matching installed version
+  pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjs.getDocument({ data: buf }).promise;
+  const page = await pdf.getPage(1);
+  const viewport = page.getViewport({ scale: 2 });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return canvas.toDataURL('image/jpeg', 0.85);
+}
+
 export default function SketchTool({ onApply }: { onApply: (config: Partial<Config>) => void }) {
   const [mode, setMode] = useState<Mode>('draw');
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -18,6 +36,7 @@ export default function SketchTool({ onApply }: { onApply: (config: Partial<Conf
   const [hasDrawing, setHasDrawing] = useState(false);
   const [uploadPreview, setUploadPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [converting, setConverting] = useState(false);
   const [result, setResult] = useState<AnalyzedConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,15 +90,28 @@ export default function SketchTool({ onApply }: { onApply: (config: Partial<Conf
     setError(null);
   };
 
-  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setResult(null);
+    setError(null);
+
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (isPdf) {
+      setConverting(true);
+      try {
+        const img = await pdfToImage(file);
+        setUploadPreview(img);
+      } catch {
+        setError('Не удалось прочитать PDF. Попробуйте другой файл или фото.');
+      } finally {
+        setConverting(false);
+      }
+      return;
+    }
+
     const reader = new FileReader();
-    reader.onload = () => {
-      setUploadPreview(reader.result as string);
-      setResult(null);
-      setError(null);
-    };
+    reader.onload = () => setUploadPreview(reader.result as string);
     reader.readAsDataURL(file);
   };
 
@@ -125,7 +157,7 @@ export default function SketchTool({ onApply }: { onApply: (config: Partial<Conf
         </h3>
       </div>
       <p className="font-opensans text-white/50 text-xs mb-5">
-        Нарисуйте мебель от руки или загрузите фото/скан — ИИ распознает и подберёт конфигурацию.
+        Нарисуйте мебель от руки или загрузите фото, скан или PDF — ИИ распознает и подберёт конфигурацию.
       </p>
 
       {/* mode tabs */}
@@ -146,7 +178,7 @@ export default function SketchTool({ onApply }: { onApply: (config: Partial<Conf
           }`}
         >
           <Icon name="Upload" size={14} />
-          Загрузить фото
+          Фото / PDF
         </button>
       </div>
 
@@ -190,14 +222,21 @@ export default function SketchTool({ onApply }: { onApply: (config: Partial<Conf
                 <Icon name="X" size={14} />
               </button>
             </div>
+          ) : converting ? (
+            <div className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-[#A0784A] py-16 rounded-sm">
+              <Icon name="Loader" size={32} className="text-[#A0784A] animate-spin" />
+              <span className="font-montserrat font-700 text-white/70 text-xs uppercase tracking-widest">
+                Читаем PDF...
+              </span>
+            </div>
           ) : (
             <label className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-white/20 hover:border-[#A0784A] transition cursor-pointer py-16 rounded-sm">
-              <Icon name="ImagePlus" size={32} className="text-[#A0784A]" />
+              <Icon name="FileUp" size={32} className="text-[#A0784A]" />
               <span className="font-montserrat font-700 text-white/70 text-xs uppercase tracking-widest">
-                Выберите фото или скан
+                Фото, скан или PDF
               </span>
-              <span className="font-opensans text-white/40 text-xs">JPG, PNG — до 10 МБ</span>
-              <input type="file" accept="image/*" onChange={onFile} className="hidden" />
+              <span className="font-opensans text-white/40 text-xs">JPG, PNG, PDF — до 10 МБ</span>
+              <input type="file" accept="image/*,application/pdf" onChange={onFile} className="hidden" />
             </label>
           )}
         </div>
