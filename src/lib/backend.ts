@@ -4,4 +4,5 @@ export const BACKEND = {
   leads: 'https://functions.poehali.dev/c5fb3546-f3d1-491f-a29f-08c44f869d98',
   admin: 'https://functions.poehali.dev/baa30901-6612-4b42-b19f-ecb578d016ed',
   removeBg: 'https://functions.poehali.dev/da146b67-9064-42f8-9bd5-204f98110d3d',
+  gen3d: 'https://functions.poehali.dev/28255b64-d0ea-4697-ad74-9af62b3fcd84',
 };
