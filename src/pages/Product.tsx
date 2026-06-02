@@ -4,7 +4,7 @@ import Icon from '@/components/ui/icon';
 import Navbar from '@/components/Navbar';
 import FooterSection from '@/components/FooterSection';
 import AIChatWidget from '@/components/AIChatWidget';
-import Product3D from '@/components/shop/Product3D';
+import PhotoTilt3D from '@/components/shop/PhotoTilt3D';
 import { useCart } from '@/context/CartContext';
 import { productById, productConfig, products } from '@/data/catalog';
 import { calcMonthly } from '@/components/constructor/types';
@@ -70,7 +70,7 @@ export default function Product() {
             </div>
 
             {tab === 'view' ? (
-              <Product3D config={cfg} className="w-full aspect-square bg-[#202225]" />
+              <PhotoTilt3D src={product.img} alt={product.title} className="w-full aspect-square" amplitude={12} />
             ) : (
               <Suspense fallback={<div className="aspect-square bg-[#242424] flex items-center justify-center"><Icon name="Loader" size={28} className="text-[#A0784A] animate-spin" /></div>}>
                 <RoomTryOn config={cfg} warm={false} />

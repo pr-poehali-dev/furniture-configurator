@@ -2,12 +2,11 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import Icon from '@/components/ui/icon';
 import { useCart } from '@/context/CartContext';
-import Product3D from '@/components/shop/Product3D';
+import PhotoTilt3D from '@/components/shop/PhotoTilt3D';
 import {
   CATEGORIES,
   FILTERS_MATERIAL,
   products,
-  productConfig,
   type Product,
 } from '@/data/catalog';
 
@@ -19,7 +18,7 @@ function ProductCard({ p }: { p: Product }) {
     <div className="group hover-lift flex flex-col">
       <div className="relative overflow-hidden h-52">
         {show3d ? (
-          <Product3D config={productConfig(p)} className="w-full h-full" />
+          <PhotoTilt3D src={p.img} alt={p.title} className="w-full h-full" amplitude={10} />
         ) : (
           <Link to={`/product/${p.id}`}>
             <img
