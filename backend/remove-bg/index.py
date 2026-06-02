@@ -18,36 +18,72 @@ def _cors():
     }
 
 
-def _remove_bg(src_bytes, tol=42):
-    '''Удаляет однородный фон flood-fill от краёв изображения.'''
+def _edge_palette(px, W, H, step=6):
+    '''Собирает эталонные цвета фона по всему периметру кадра.'''
+    samples = []
+    for x in range(0, W, step):
+        samples.append(px[x, 0][:3])
+        samples.append(px[x, H - 1][:3])
+    for y in range(0, H, step):
+        samples.append(px[0, y][:3])
+        samples.append(px[W - 1, y][:3])
+    # кластеризуем грубо: усредняем близкие оттенки в несколько «ключевых» цветов
+    palette = []
+    for s in samples:
+        placed = False
+        for p in palette:
+            if (s[0] - p[0]) ** 2 + (s[1] - p[1]) ** 2 + (s[2] - p[2]) ** 2 < 30 * 30:
+                placed = True
+                break
+        if not placed:
+            palette.append(s)
+        if len(palette) >= 6:
+            break
+    return palette or [(255, 255, 255)]
+
+
+def _remove_bg(src_bytes, tol=46):
+    '''Аккуратно вырезает предмет: многоцветный flood-fill от краёв,
+    anti-halo, мягкая растушёвка краёв, обрезка по содержимому.'''
     img = Image.open(io.BytesIO(src_bytes)).convert('RGBA')
-    base_w = 600
+    base_w = 640
     scale = base_w / img.width if img.width > base_w else 1.0
     work = img.resize((int(img.width * scale), int(img.height * scale))) if scale != 1.0 else img.copy()
 
     W, H = work.size
     px = work.load()
 
-    corners = [(0, 0), (W - 1, 0), (0, H - 1), (W - 1, H - 1)]
-    cr = sum(px[x, y][0] for x, y in corners) // 4
-    cg = sum(px[x, y][1] for x, y in corners) // 4
-    cb = sum(px[x, y][2] for x, y in corners) // 4
+    palette = _edge_palette(px, W, H)
+    tol2 = tol * tol * 3
 
+    def is_bg(r, g, b):
+        for pr, pg, pb in palette:
+            dr, dg, db = r - pr, g - pg, b - pb
+            if dr * dr + dg * dg + db * db <= tol2:
+                return True
+        return False
+
+    # seed-точки по всему периметру (устойчивость к неоднородному фону)
     visited = bytearray(W * H)
     transparent = bytearray(W * H)
     q = deque()
-    for x, y in corners:
-        i = y * W + x
-        if not visited[i]:
-            visited[i] = 1
-            q.append((x, y))
+    for x in range(W):
+        for y in (0, H - 1):
+            i = y * W + x
+            if not visited[i]:
+                visited[i] = 1
+                q.append((x, y))
+    for y in range(H):
+        for x in (0, W - 1):
+            i = y * W + x
+            if not visited[i]:
+                visited[i] = 1
+                q.append((x, y))
 
-    tol2 = tol * tol
     while q:
         x, y = q.popleft()
         r, g, b, _ = px[x, y]
-        dr, dg, db = r - cr, g - cg, b - cb
-        if dr * dr + dg * dg + db * db <= tol2 * 3:
+        if is_bg(r, g, b):
             transparent[y * W + x] = 1
             for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
                 if 0 <= nx < W and 0 <= ny < H:
@@ -56,6 +92,7 @@ def _remove_bg(src_bytes, tol=42):
                         visited[j] = 1
                         q.append((nx, ny))
 
+    # маска: 255 = предмет, 0 = фон
     mask = Image.new('L', (W, H), 255)
     mpx = mask.load()
     for y in range(H):
@@ -63,7 +100,14 @@ def _remove_bg(src_bytes, tol=42):
         for x in range(W):
             if transparent[row + x]:
                 mpx[x, y] = 0
-    mask = mask.filter(ImageFilter.GaussianBlur(1.2))
+
+    # anti-halo: сжимаем контур, чтобы убрать светлый ореол фона по краю
+    mask = mask.filter(ImageFilter.MinFilter(3))
+    # мягкая растушёвка краёв
+    mask = mask.filter(ImageFilter.GaussianBlur(1.6))
+    # повышаем контраст альфы (резкая граница, но сглаженная)
+    mask = mask.point(lambda v: 0 if v < 90 else (255 if v > 170 else int((v - 90) / 80 * 255)))
+    mask = mask.filter(ImageFilter.GaussianBlur(0.8))
 
     if mask.size != img.size:
         mask = mask.resize(img.size, Image.LANCZOS)
@@ -71,6 +115,10 @@ def _remove_bg(src_bytes, tol=42):
 
     bbox = img.getbbox()
     if bbox:
+        # небольшой отступ, чтобы предмет не упирался в края
+        pad = max(4, (bbox[2] - bbox[0]) // 40)
+        bbox = (max(0, bbox[0] - pad), max(0, bbox[1] - pad),
+                min(img.width, bbox[2] + pad), min(img.height, bbox[3] + pad))
         img = img.crop(bbox)
 
     out = io.BytesIO()
@@ -112,7 +160,7 @@ def handler(event, context):
     access_key = os.environ['AWS_ACCESS_KEY_ID']
     secret_key = os.environ['AWS_SECRET_ACCESS_KEY']
 
-    digest = hashlib.md5(image_url.encode('utf-8')).hexdigest()
+    digest = hashlib.md5(('v2:' + image_url).encode('utf-8')).hexdigest()
     key = f'cutout/{digest}.png'
     cdn_url = f'https://cdn.poehali.dev/projects/{access_key}/bucket/{key}'
 
