@@ -3,6 +3,7 @@ import os
 import hashlib
 import urllib.request
 import urllib.error
+import base64
 
 import boto3
 import psycopg2
@@ -34,7 +35,7 @@ PROMPT = (
     'Keep the original colors, texture and design. Photorealistic, high detail, catalog quality.'
 )
 
-FAL_MODEL = 'fal-ai/flux-pro/kontext'
+IMAGE_MODEL = 'google/gemini-2.5-flash-image'
 
 
 def _s3():
@@ -77,22 +78,54 @@ def _save(src_url, studio_url):
         conn.close()
 
 
-def _fal_generate(image_url, fal_key):
-    '''ИИ-художник через fal.ai FLUX Kontext (image-to-image).
-    Возвращает (url, None) или (None, detail).'''
+def _find_image_in_message(msg):
+    '''Достаёт картинку из ответа image-модели (разные форматы polza/OpenRouter).'''
+    if not isinstance(msg, dict):
+        return None
+    # формат OpenRouter: message.images[].image_url.url (data:...;base64 или http)
+    for img in (msg.get('images') or []):
+        iu = img.get('image_url') if isinstance(img, dict) else None
+        url = iu.get('url') if isinstance(iu, dict) else (img if isinstance(img, str) else None)
+        if isinstance(url, str) and (url.startswith('http') or url.startswith('data:')):
+            return url
+    # иногда картинка лежит прямо в content как массив частей
+    content = msg.get('content')
+    if isinstance(content, list):
+        for part in content:
+            if isinstance(part, dict):
+                iu = part.get('image_url')
+                if isinstance(iu, dict) and isinstance(iu.get('url'), str):
+                    return iu['url']
+                if isinstance(part.get('url'), str) and part['url'].startswith(('http', 'data:')):
+                    return part['url']
+    # либо текст с data:image
+    if isinstance(content, str) and 'data:image' in content:
+        start = content.find('data:image')
+        return content[start:].split()[0].strip('"\')')
+    return None
+
+
+def _generate_image(image_url, api_key):
+    '''ИИ-художник: студийный кадр через polza.ai (gemini-2.5-flash-image).
+    Возвращает (data_or_http_url, None) или (None, detail).'''
     payload = json.dumps({
-        'prompt': PROMPT,
-        'image_url': image_url,
-        'aspect_ratio': '1:1',
-        'output_format': 'png',
-        'num_images': 1,
-        'safety_tolerance': '5',
+        'model': IMAGE_MODEL,
+        'modalities': ['image', 'text'],
+        'messages': [
+            {
+                'role': 'user',
+                'content': [
+                    {'type': 'text', 'text': PROMPT},
+                    {'type': 'image_url', 'image_url': {'url': image_url}},
+                ],
+            },
+        ],
     }).encode('utf-8')
 
     req = urllib.request.Request(
-        f'https://fal.run/{FAL_MODEL}',
+        'https://api.polza.ai/api/v1/chat/completions',
         data=payload,
-        headers={'Authorization': f'Key {fal_key}', 'Content-Type': 'application/json'},
+        headers={'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'},
         method='POST',
     )
     try:
@@ -103,10 +136,12 @@ def _fal_generate(image_url, fal_key):
     except Exception as e:
         return None, str(e)[:400]
 
-    images = out.get('images') or []
-    if images and isinstance(images[0], dict) and images[0].get('url'):
-        return images[0]['url'], None
-    return None, 'Неожиданный ответ fal.ai: ' + json.dumps(out)[:200]
+    choices = out.get('choices') or []
+    if choices:
+        url = _find_image_in_message(choices[0].get('message'))
+        if url:
+            return url, None
+    return None, 'Картинка не получена: ' + json.dumps(out)[:250]
 
 
 def handler(event, context):
@@ -149,26 +184,30 @@ def handler(event, context):
         return _json(200, {'status': 'none'})
 
     # action == start: разовая генерация
-    fal_key = os.environ.get('FAL_API_KEY')
-    if not fal_key:
-        return _json(500, {'error': 'FAL_API_KEY не настроен'})
+    api_key = os.environ.get('POLZA_AI_API_KEY')
+    if not api_key:
+        return _json(500, {'error': 'POLZA_AI_API_KEY не настроен'})
 
-    gen_url, detail = _fal_generate(image_url, fal_key)
+    gen_url, detail = _generate_image(image_url, api_key)
     if not gen_url:
         return _json(502, {'status': 'error', 'detail': detail})
 
-    # перекладываем результат в наш S3, чтобы ссылка была вечной
+    # результат: data:base64 или http — в любом случае кладём в наш S3 навечно
     access_key = os.environ['AWS_ACCESS_KEY_ID']
-    digest = hashlib.md5(('studio:fal:' + image_url).encode('utf-8')).hexdigest()
+    digest = hashlib.md5(('studio:gem:' + image_url).encode('utf-8')).hexdigest()
     key = f'studio/{digest}.png'
     cdn_url = f'https://cdn.poehali.dev/projects/{access_key}/bucket/{key}'
     try:
-        with urllib.request.urlopen(gen_url, timeout=60) as r:
-            img_bytes = r.read()
+        if gen_url.startswith('data:'):
+            b64 = gen_url.split(',', 1)[1]
+            img_bytes = base64.b64decode(b64)
+        else:
+            with urllib.request.urlopen(gen_url, timeout=60) as r:
+                img_bytes = r.read()
         _s3().put_object(Bucket='files', Key=key, Body=img_bytes, ContentType='image/png')
         final_url = cdn_url
-    except Exception:
-        final_url = gen_url  # на крайний случай — прямая ссылка fal
+    except Exception as e:
+        return _json(502, {'status': 'error', 'detail': 'Сохранение не удалось: ' + str(e)[:200]})
 
     _save(image_url, final_url)
     return _json(200, {'status': 'ready', 'url': final_url})
