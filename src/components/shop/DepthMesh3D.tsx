@@ -1,109 +1,166 @@
-import { useRef, useMemo, Suspense } from 'react';
-import { Canvas, useFrame, useLoader } from '@react-three/fiber';
-import { OrbitControls, Environment } from '@react-three/drei';
+import { useRef, useState, useEffect, Suspense } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 
-type Props = { textureUrl: string; depthUrl: string };
+type Props = { textureUrl: string; depthUrl: string; depthScale?: number };
 
-const vertex = /* glsl */ `
-  uniform sampler2D uDepth;
-  uniform float uDepthScale;
-  uniform sampler2D uTex;
-  varying vec2 vUv;
-  varying float vAlpha;
-  void main() {
-    vUv = uv;
-    vec4 t = texture2D(uTex, uv);
-    vAlpha = t.a;
-    float d = texture2D(uDepth, uv).r;
-    // фон (alpha~0) — отводим назад, чтобы не торчал
-    float depth = d * uDepthScale * step(0.15, t.a);
-    vec3 pos = position;
-    pos.z += depth;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+function loadTexture(url: string): Promise<THREE.Texture> {
+  return new Promise((resolve, reject) => {
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin('anonymous');
+    loader.load(url, (t) => resolve(t), undefined, reject);
+  });
+}
+
+/** Превращает depth-картинку в данные глубины (0..1) на сетке gridxgrid. */
+function readDepthGrid(depthTex: THREE.Texture, alphaTex: THREE.Texture, grid: number) {
+  try {
+    const dImg = depthTex.image as HTMLImageElement;
+    const aImg = alphaTex.image as HTMLImageElement;
+    const cv = document.createElement('canvas');
+    cv.width = grid; cv.height = grid;
+    const ctx = cv.getContext('2d', { willReadFrequently: true })!;
+    ctx.drawImage(dImg, 0, 0, grid, grid);
+    const d = ctx.getImageData(0, 0, grid, grid).data;
+    ctx.clearRect(0, 0, grid, grid);
+    ctx.drawImage(aImg, 0, 0, grid, grid);
+    const a = ctx.getImageData(0, 0, grid, grid).data;
+    return { depth: d, alpha: a };
+  } catch {
+    return null;
   }
-`;
+}
 
-const fragment = /* glsl */ `
-  uniform sampler2D uTex;
-  uniform sampler2D uDepth;
-  uniform float uDepthScale;
-  varying vec2 vUv;
-  varying float vAlpha;
-  void main() {
-    vec4 c = texture2D(uTex, vUv);
-    if (c.a < 0.35) discard; // фон не рисуем
-    // мягкое затенение по глубине — объём виден лучше
-    float d = texture2D(uDepth, vUv).r;
-    float shade = 0.78 + d * 0.32;
-    gl_FragColor = vec4(c.rgb * shade, 1.0);
-  }
-`;
+function ObjectMesh({ textureUrl, depthUrl, depthScale = 0.8 }: Props) {
+  const groupRef = useRef<THREE.Group>(null);
+  const [geo, setGeo] = useState<THREE.BufferGeometry | null>(null);
+  const [mat, setMat] = useState<THREE.Material | null>(null);
 
-function Mesh({ textureUrl, depthUrl }: Props) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const [tex, depth] = useLoader(THREE.TextureLoader, [textureUrl, depthUrl]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const [tex, depth] = await Promise.all([loadTexture(textureUrl), loadTexture(depthUrl)]);
+      if (!alive) return;
+      tex.colorSpace = THREE.SRGBColorSpace;
 
-  const { aspect, uniforms } = useMemo(() => {
-    tex.colorSpace = THREE.SRGBColorSpace;
-    const img = tex.image as HTMLImageElement | undefined;
-    const a = img && img.width && img.height ? img.width / img.height : 1;
-    return {
-      aspect: a,
-      uniforms: {
-        uTex: { value: tex },
-        uDepth: { value: depth },
-        uDepthScale: { value: 0.55 },
-      },
-    };
-  }, [tex, depth]);
+      const img = tex.image as HTMLImageElement;
+      const aspect = img.width && img.height ? img.width / img.height : 1;
+      const grid = 160;
+      const data = readDepthGrid(depth, tex, grid);
 
-  // лёгкое «дыхание» — намёк на живой объём, вращение делает OrbitControls
-  useFrame((state) => {
-    if (meshRef.current) {
-      meshRef.current.position.y = Math.sin(state.clock.elapsedTime * 0.8) * 0.03;
-    }
+      const W = aspect >= 1 ? 3 : 3 * aspect;
+      const H = aspect >= 1 ? 3 / aspect : 3;
+
+      const g = new THREE.BufferGeometry();
+
+      if (data) {
+        // строим сетку только по пикселям предмета (alpha>порог), смещая по глубине
+        const dData = data.depth, aData = data.alpha;
+        const positions: number[] = [];
+        const uvs: number[] = [];
+        const indices: number[] = [];
+        const idx = new Int32Array(grid * grid).fill(-1);
+        const depthAt = (x: number, y: number) => (dData[(y * grid + x) * 4] / 255) * depthScale;
+        const solid = (x: number, y: number) => aData[(y * grid + x) * 4 + 3] > 110;
+
+        let count = 0;
+        for (let y = 0; y < grid; y++) {
+          for (let x = 0; x < grid; x++) {
+            if (!solid(x, y)) continue;
+            idx[y * grid + x] = count++;
+            const px = (x / (grid - 1) - 0.5) * W;
+            const py = (0.5 - y / (grid - 1)) * H;
+            positions.push(px, py, depthAt(x, y));
+            uvs.push(x / (grid - 1), 1 - y / (grid - 1));
+          }
+        }
+        for (let y = 0; y < grid - 1; y++) {
+          for (let x = 0; x < grid - 1; x++) {
+            const a = idx[y * grid + x];
+            const b = idx[y * grid + x + 1];
+            const c = idx[(y + 1) * grid + x];
+            const d2 = idx[(y + 1) * grid + x + 1];
+            if (a >= 0 && b >= 0 && c >= 0) indices.push(a, c, b);
+            if (b >= 0 && c >= 0 && d2 >= 0) indices.push(b, c, d2);
+          }
+        }
+        g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        g.setIndex(indices);
+      } else {
+        // фолбэк без CORS-данных: плоскость, фон режется по альфе текстуры
+        const plane = new THREE.PlaneGeometry(W, H, 1, 1);
+        g.setAttribute('position', plane.getAttribute('position'));
+        g.setAttribute('uv', plane.getAttribute('uv'));
+        g.setIndex(plane.getIndex());
+        plane.dispose();
+      }
+      g.computeVertexNormals();
+
+      const m = new THREE.MeshStandardMaterial({
+        map: tex,
+        roughness: 0.65,
+        metalness: 0.05,
+        side: THREE.DoubleSide,
+        transparent: true,
+        alphaTest: 0.4,
+      });
+
+      if (!alive) { g.dispose(); m.dispose(); return; }
+      setGeo(g);
+      setMat(m);
+    })();
+    return () => { alive = false; };
+  }, [textureUrl, depthUrl, depthScale]);
+
+  useFrame((state, delta) => {
+    if (groupRef.current) groupRef.current.rotation.y += delta * 0.4;
   });
 
-  const w = aspect >= 1 ? 3 : 3 * aspect;
-  const h = aspect >= 1 ? 3 / aspect : 3;
-
+  if (!geo || !mat) return null;
   return (
-    <mesh ref={meshRef}>
-      <planeGeometry args={[w, h, 200, 200]} />
-      <shaderMaterial
-        vertexShader={vertex}
-        fragmentShader={fragment}
-        uniforms={uniforms}
-        side={THREE.DoubleSide}
-        transparent
-      />
-    </mesh>
+    <group ref={groupRef}>
+      <mesh geometry={geo} material={mat} />
+    </group>
   );
 }
 
+function ContextGuard() {
+  const { gl } = useThree();
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const onLost = (e: Event) => { e.preventDefault(); };
+    canvas.addEventListener('webglcontextlost', onLost);
+    return () => canvas.removeEventListener('webglcontextlost', onLost);
+  }, [gl]);
+  return null;
+}
+
 /**
- * Настоящий 3D-mesh из одного фото: сетка получает рельеф по карте глубины
- * (displacement в вершинном шейдере), фото накладывается текстурой.
- * Крутится на 360° мышью/пальцем. Без внешних API.
+ * Свой 3D-движок: из фото и его карты глубины строится настоящая полигональная
+ * сетка (вершины смещены по глубине), фото — текстура. Объект вращается в 3D.
+ * Полностью оффлайн, без внешних API и HDR.
  */
-export default function DepthMesh3D({ textureUrl, depthUrl }: Props) {
+export default function DepthMesh3D({ textureUrl, depthUrl, depthScale }: Props) {
   return (
-    <Canvas dpr={[1, 2]} camera={{ fov: 40, position: [0, 0, 5.2] }}>
-      <ambientLight intensity={0.9} />
-      <directionalLight position={[3, 4, 5]} intensity={1.1} />
+    <Canvas
+      dpr={[1, 2]}
+      gl={{ preserveDrawingBuffer: true, antialias: true, powerPreference: 'high-performance' }}
+      camera={{ fov: 42, position: [0, 0, 4.6] }}
+    >
+      <ContextGuard />
+      <color attach="background" args={['#f0e8da']} />
+      <ambientLight intensity={1.1} />
+      <directionalLight position={[2, 3, 5]} intensity={1.4} />
+      <directionalLight position={[-3, 1, 2]} intensity={0.6} />
       <Suspense fallback={null}>
-        <Mesh textureUrl={textureUrl} depthUrl={depthUrl} />
-        <Environment preset="city" />
+        <ObjectMesh textureUrl={textureUrl} depthUrl={depthUrl} depthScale={depthScale} />
       </Suspense>
       <OrbitControls
-        autoRotate
-        autoRotateSpeed={1.6}
         enablePan={false}
         minDistance={2.5}
-        maxDistance={9}
-        minPolarAngle={Math.PI / 3}
-        maxPolarAngle={(Math.PI * 2) / 3}
+        maxDistance={8}
         enableDamping
         dampingFactor={0.08}
       />
