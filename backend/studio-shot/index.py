@@ -50,28 +50,30 @@ def _schema():
     return os.environ['MAIN_DB_SCHEMA']
 
 
-def _get_saved(src_url):
+def _get_row(src_url):
+    '''Возвращает (status, studio_url, detail) или None.'''
     conn = psycopg2.connect(os.environ['DATABASE_URL'])
     try:
         cur = conn.cursor()
         cur.execute(
-            f"SELECT studio_url FROM {_schema()}.studio_shots WHERE src_url = %s",
+            f"SELECT status, studio_url, detail FROM {_schema()}.studio_shots WHERE src_url = %s",
             (src_url,),
         )
-        row = cur.fetchone()
-        return row[0] if row else None
+        return cur.fetchone()
     finally:
         conn.close()
 
 
-def _save(src_url, studio_url):
+def _set_row(src_url, status, studio_url='', detail=None):
     conn = psycopg2.connect(os.environ['DATABASE_URL'])
     try:
         cur = conn.cursor()
         cur.execute(
-            f"INSERT INTO {_schema()}.studio_shots (src_url, studio_url) VALUES (%s, %s) "
-            f"ON CONFLICT (src_url) DO UPDATE SET studio_url = EXCLUDED.studio_url, created_at = now()",
-            (src_url, studio_url),
+            f"INSERT INTO {_schema()}.studio_shots (src_url, studio_url, status, detail) "
+            f"VALUES (%s, %s, %s, %s) "
+            f"ON CONFLICT (src_url) DO UPDATE SET studio_url = EXCLUDED.studio_url, "
+            f"status = EXCLUDED.status, detail = EXCLUDED.detail, created_at = now()",
+            (src_url, studio_url, status, detail),
         )
         conn.commit()
     finally:
@@ -105,25 +107,39 @@ def _find_image_in_message(msg):
     return None
 
 
+def _extract_media_url(out):
+    '''Достаёт ссылку/base64 картинки из ответа media-эндпоинта polza.'''
+    if not isinstance(out, dict):
+        return None
+    data = out.get('data')
+    if isinstance(data, list) and data:
+        d0 = data[0]
+        if isinstance(d0, dict):
+            for k in ('url', 'b64_json', 'image_url'):
+                v = d0.get(k)
+                if isinstance(v, str) and v:
+                    return ('data:image/png;base64,' + v) if k == 'b64_json' else v
+        if isinstance(d0, str) and d0.startswith(('http', 'data:')):
+            return d0
+    for k in ('url', 'image_url', 'image', 'output'):
+        v = out.get(k)
+        if isinstance(v, str) and v.startswith(('http', 'data:')):
+            return v
+    return None
+
+
 def _generate_image(image_url, api_key):
-    '''ИИ-художник: студийный кадр через polza.ai (gemini-2.5-flash-image).
+    '''ИИ-художник: студийный кадр через polza.ai media API (gemini image edit).
     Возвращает (data_or_http_url, None) или (None, detail).'''
     payload = json.dumps({
         'model': IMAGE_MODEL,
-        'modalities': ['image', 'text'],
-        'messages': [
-            {
-                'role': 'user',
-                'content': [
-                    {'type': 'text', 'text': PROMPT},
-                    {'type': 'image_url', 'image_url': {'url': image_url}},
-                ],
-            },
-        ],
+        'prompt': PROMPT,
+        'image_urls': [image_url],
+        'n': 1,
     }).encode('utf-8')
 
     req = urllib.request.Request(
-        'https://api.polza.ai/api/v1/chat/completions',
+        'https://api.polza.ai/api/v1/images/generations',
         data=payload,
         headers={'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'},
         method='POST',
@@ -132,25 +148,105 @@ def _generate_image(image_url, api_key):
         with urllib.request.urlopen(req, timeout=180) as r:
             out = json.loads(r.read().decode('utf-8'))
     except urllib.error.HTTPError as e:
-        return None, e.read().decode('utf-8')[:400]
+        return None, 'HTTP:' + e.read().decode('utf-8')[:1500]
     except Exception as e:
         return None, str(e)[:400]
 
-    choices = out.get('choices') or []
-    if choices:
-        url = _find_image_in_message(choices[0].get('message'))
+    url = _extract_media_url(out)
+    if url:
+        return url, None
+
+    # асинхронный режим: пришёл requestId — опрашиваем результат
+    request_id = out.get('requestId') or out.get('request_id') or out.get('id')
+    if request_id:
+        return _poll_media(request_id, api_key)
+
+    return None, 'RAW:' + json.dumps(out)[:3000]
+
+
+POLL_PATHS = [
+    'https://api.polza.ai/api/v1/images/generations/{id}',
+    'https://api.polza.ai/api/v1/media/{id}',
+    'https://api.polza.ai/api/v1/images/{id}',
+    'https://api.polza.ai/api/v1/generations/{id}',
+    'https://api.polza.ai/api/v1/requests/{id}',
+]
+
+
+def _poll_once(url, api_key):
+    req = urllib.request.Request(url, headers={'Authorization': f'Bearer {api_key}'}, method='GET')
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read().decode('utf-8'))
+
+
+def _poll_media(request_id, api_key):
+    '''Опрашивает готовность media-задачи polza, перебирая возможные пути.'''
+    import time
+    good_path = None
+    last = None
+    for attempt in range(24):  # ~2 минуты
+        if good_path is None:
+            for p in POLL_PATHS:
+                try:
+                    out = _poll_once(p.format(id=request_id), api_key)
+                    good_path = p
+                    last = out
+                    break
+                except urllib.error.HTTPError as e:
+                    if e.code == 404:
+                        continue
+                    return None, 'POLL_HTTP:' + e.read().decode('utf-8')[:800]
+                except Exception:
+                    continue
+            if good_path is None:
+                return None, 'POLL_NOPATH for ' + request_id
+        else:
+            try:
+                last = _poll_once(good_path.format(id=request_id), api_key)
+            except Exception as e:
+                return None, 'POLL:' + str(e)[:300]
+
+        url = _extract_media_url(last)
         if url:
             return url, None
-    return None, 'Картинка не получена: ' + json.dumps(out)[:250]
+        status = str((last or {}).get('status', '')).lower()
+        if status in ('failed', 'error', 'canceled'):
+            return None, 'POLL_FAIL:' + json.dumps(last)[:600]
+        time.sleep(5)
+    return None, 'POLL_TIMEOUT(' + str(good_path) + '):' + json.dumps(last)[:500]
+
+
+def _process(image_url, api_key):
+    '''Полный цикл генерации: рисует кадр, кладёт в S3, пишет результат в БД.'''
+    try:
+        gen_url, detail = _generate_image(image_url, api_key)
+        if not gen_url:
+            _set_row(image_url, 'error', '', (detail or '')[:3800])
+            return
+
+        access_key = os.environ['AWS_ACCESS_KEY_ID']
+        digest = hashlib.md5(('studio:gem:' + image_url).encode('utf-8')).hexdigest()
+        key = f'studio/{digest}.png'
+        cdn_url = f'https://cdn.poehali.dev/projects/{access_key}/bucket/{key}'
+
+        if gen_url.startswith('data:'):
+            img_bytes = base64.b64decode(gen_url.split(',', 1)[1])
+        else:
+            with urllib.request.urlopen(gen_url, timeout=60) as r:
+                img_bytes = r.read()
+        _s3().put_object(Bucket='files', Key=key, Body=img_bytes, ContentType='image/png')
+        _set_row(image_url, 'ready', cdn_url, None)
+    except Exception as e:
+        _set_row(image_url, 'error', '', str(e)[:300])
 
 
 def handler(event, context):
     '''
-    ИИ-художник студийного кадра (fal.ai): дорисовывает предмет до целого и
-    ставит на студийный фон со светом и тенью. Результат сохраняется в БД и S3
-    ОДИН раз на исходное фото — далее отдаётся готовая ссылка мгновенно.
-    POST {action:"status", imageUrl} -> {status: ready|none, url?}
-    POST {action:"start", imageUrl}  -> генерирует и фиксирует кадр.
+    ИИ-художник студийного кадра: дорисовывает предмет до целого и ставит на
+    студийный фон со светом и тенью (polza.ai + Gemini). Результат фиксируется
+    в БД и S3 ОДИН раз. Генерация идёт синхронно, статус хранится в БД.
+    POST {action:"status", imageUrl} -> {status: ready|processing|error|none, url?, detail?}
+    POST {action:"start", imageUrl}  -> запускает генерацию (выполняет до конца).
     Args: event с httpMethod, body
           context - объект с request_id
     Returns: HTTP-ответ JSON
@@ -172,42 +268,33 @@ def handler(event, context):
 
     action = body.get('action', 'start')
 
-    # уже зафиксировано в БД?
     try:
-        saved = _get_saved(image_url)
+        row = _get_row(image_url)
     except Exception as e:
         return _json(500, {'error': 'DB error', 'detail': str(e)[:300]})
-    if saved:
-        return _json(200, {'status': 'ready', 'url': saved})
+
+    if row:
+        status, studio_url, detail = row
+        if status == 'ready' and studio_url:
+            return _json(200, {'status': 'ready', 'url': studio_url})
+        if status == 'processing':
+            return _json(200, {'status': 'processing'})
+        if status == 'error' and action == 'status':
+            return _json(200, {'status': 'error', 'detail': detail})
 
     if action == 'status':
         return _json(200, {'status': 'none'})
 
-    # action == start: разовая генерация
+    # action == start
     api_key = os.environ.get('POLZA_AI_API_KEY')
     if not api_key:
         return _json(500, {'error': 'POLZA_AI_API_KEY не настроен'})
 
-    gen_url, detail = _generate_image(image_url, api_key)
-    if not gen_url:
-        return _json(502, {'status': 'error', 'detail': detail})
+    # помечаем processing, чтобы повторные клики не плодили генерации
+    _set_row(image_url, 'processing', '', None)
+    _process(image_url, api_key)
 
-    # результат: data:base64 или http — в любом случае кладём в наш S3 навечно
-    access_key = os.environ['AWS_ACCESS_KEY_ID']
-    digest = hashlib.md5(('studio:gem:' + image_url).encode('utf-8')).hexdigest()
-    key = f'studio/{digest}.png'
-    cdn_url = f'https://cdn.poehali.dev/projects/{access_key}/bucket/{key}'
-    try:
-        if gen_url.startswith('data:'):
-            b64 = gen_url.split(',', 1)[1]
-            img_bytes = base64.b64decode(b64)
-        else:
-            with urllib.request.urlopen(gen_url, timeout=60) as r:
-                img_bytes = r.read()
-        _s3().put_object(Bucket='files', Key=key, Body=img_bytes, ContentType='image/png')
-        final_url = cdn_url
-    except Exception as e:
-        return _json(502, {'status': 'error', 'detail': 'Сохранение не удалось: ' + str(e)[:200]})
-
-    _save(image_url, final_url)
-    return _json(200, {'status': 'ready', 'url': final_url})
+    final = _get_row(image_url)
+    if final and final[0] == 'ready' and final[1]:
+        return _json(200, {'status': 'ready', 'url': final[1]})
+    return _json(200, {'status': 'error', 'detail': (final[2] if final else 'unknown')})

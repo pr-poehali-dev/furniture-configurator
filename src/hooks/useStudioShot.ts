@@ -42,26 +42,30 @@ export function useStudioShot(src: string, enabled: boolean): State {
 
         // запускаем разовую генерацию
         setState({ status: 'pending', url: '' });
+
+        let polls = 0;
+        const poll = () => {
+          timer.current = window.setTimeout(() => {
+            if (!alive) return;
+            polls += 1;
+            ask('status').then((s) => {
+              if (!alive) return;
+              if (s.status === 'ready' && s.url) finish(s.url);
+              else if (s.status === 'error') setState({ status: 'error', url: '' });
+              else if (polls > 30) setState({ status: 'error', url: '' });
+              else poll(); // processing / none — ждём дальше
+            }).catch(() => { if (alive) poll(); });
+          }, 4000);
+        };
+
         ask('start')
           .then((res) => {
             if (!alive) return;
             if (res.status === 'ready' && res.url) finish(res.url);
-            else setState({ status: 'error', url: '' });
+            else if (res.status === 'error') setState({ status: 'error', url: '' });
+            else poll(); // processing — добиваем опросом
           })
-          .catch(() => {
-            // запрос мог оборваться по таймауту шлюза — добиваем опросом статуса
-            if (!alive) return;
-            const poll = () => {
-              timer.current = window.setTimeout(() => {
-                ask('status').then((s) => {
-                  if (!alive) return;
-                  if (s.status === 'ready' && s.url) finish(s.url);
-                  else poll();
-                }).catch(() => { if (alive) poll(); });
-              }, 4000);
-            };
-            poll();
-          });
+          .catch(() => { if (alive) poll(); });
       })
       .catch(() => { if (alive) setState({ status: 'error', url: '' }); });
 
