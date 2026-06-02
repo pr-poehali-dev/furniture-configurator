@@ -6,17 +6,15 @@ type Props = {
   src: string;
   alt: string;
   className?: string;
-  /** число слоёв глубины (больше = объёмнее, тяжелее) */
-  layers?: number;
 };
 
 /**
- * Супер-движок 2.5D: превращает плоское фото в объёмный предмет.
- * Распознаёт предмет (вырезка), берёт карту глубины и при вращении
- * смещает слои на разную величину (parallax displacement) — создаётся
- * настоящий 3D-объём. Управление: перетаскивание, зум, авто-вращение.
+ * Движок 2.5D: превращает плоское фото в объёмный предмет.
+ * Предмет вырезается из фона, при вращении наклоняется в 3D и получает
+ * параллакс + динамический свет/тень по карте глубины. Без canvas и CORS —
+ * предмет всегда виден. Управление: перетаскивание, зум, авто-вращение.
  */
-export default function Object3DViewer({ src, alt, className = '', layers = 6 }: Props) {
+export default function Object3DViewer({ src, alt, className = '' }: Props) {
   const { url, depthUrl, ready } = useCutout(src);
   const wrapRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -33,9 +31,6 @@ export default function Object3DViewer({ src, alt, className = '', layers = 6 }:
   const autoRef = useRef(true);
   useEffect(() => { autoRef.current = auto; }, [auto]);
 
-  const hasDepth = ready && !!depthUrl;
-  const layerEls = useRef<HTMLDivElement[]>([]);
-
   const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 
   const apply = useCallback(() => {
@@ -45,11 +40,11 @@ export default function Object3DViewer({ src, alt, className = '', layers = 6 }:
     if (!dragging.current && autoRef.current) target.current.ry += 0.16;
     if (!dragging.current && (Math.abs(velocity.current.x) > 0.01 || Math.abs(velocity.current.y) > 0.01)) {
       target.current.ry += velocity.current.x;
-      target.current.rx = clamp(target.current.rx - velocity.current.y, -26, 26);
+      target.current.rx = clamp(target.current.rx - velocity.current.y, -24, 24);
       velocity.current.x *= 0.92;
       velocity.current.y *= 0.92;
     }
-    target.current.ry = clamp(target.current.ry, -34, 34);
+    target.current.ry = clamp(target.current.ry, -32, 32);
 
     const c = current.current;
     const tg = target.current;
@@ -60,27 +55,29 @@ export default function Object3DViewer({ src, alt, className = '', layers = 6 }:
     const float = autoRef.current && !dragging.current
       ? Math.sin((performance.now() - startTs.current) / 1000) * 3 : 0;
 
-    // нормализованные углы -> сдвиг параллакса в %
-    const px = c.ry / 34;   // -1..1
-    const py = c.rx / 26;
+    const nx = c.ry / 32; // -1..1
+    const ny = c.rx / 24;
 
-    el.style.transform = `translateY(${float}px) rotateX(${c.rx * 0.35}deg) rotateY(${c.ry * 0.4}deg) scale(${c.zoom})`;
+    el.style.transform =
+      `translateY(${float}px) rotateX(${c.rx}deg) rotateY(${c.ry}deg) scale(${c.zoom})`;
 
-    const n = layerEls.current.length;
-    layerEls.current.forEach((lay, i) => {
-      if (!lay) return;
-      // глубина слоя: 0 (зад) .. 1 (перёд)
-      const d = n > 1 ? i / (n - 1) : 0.5;
-      const amp = (d - 0.5) * 30; // px-амплитуда смещения
-      lay.style.transform = `translate3d(${px * amp}px, ${py * amp * 0.6}px, ${(d - 0.5) * 40}px)`;
-    });
-
-    // блик-подсветка по направлению вращения
+    // объёмный «передний» слой по карте глубины смещается сильнее (параллакс)
+    const depthEl = wrapRef.current?.querySelector('[data-depth]') as HTMLElement | null;
+    if (depthEl) {
+      depthEl.style.transform = `translate3d(${nx * 14}px, ${ny * 9}px, 0)`;
+    }
+    // динамический свет по направлению поворота
+    const shade = wrapRef.current?.querySelector('[data-shade]') as HTMLElement | null;
+    if (shade) {
+      const lx = 50 - nx * 40;
+      shade.style.background =
+        `linear-gradient(${90 + nx * 60}deg, rgba(0,0,0,${0.28 * Math.abs(nx)}) 0%, rgba(0,0,0,0) 40%), ` +
+        `radial-gradient(circle at ${lx}% 35%, rgba(255,255,255,0.5), rgba(255,255,255,0) 55%)`;
+    }
     const glow = wrapRef.current?.querySelector('[data-glow]') as HTMLElement | null;
-    if (glow) glow.style.background = `radial-gradient(circle at ${50 + px * 22}% ${38 + py * 12}%, rgba(255,255,255,0.6), rgba(255,255,255,0) 60%)`;
-
+    if (glow) glow.style.background = `radial-gradient(circle at ${50 + nx * 20}% ${38 + ny * 12}%, rgba(255,255,255,0.55), rgba(255,255,255,0) 60%)`;
     const shadow = wrapRef.current?.querySelector('[data-shadow]') as HTMLElement | null;
-    if (shadow) shadow.style.transform = `translateX(calc(-50% + ${px * 22}px)) scaleX(${c.zoom})`;
+    if (shadow) shadow.style.transform = `translateX(calc(-50% + ${nx * 20}px)) scaleX(${c.zoom})`;
 
     rafRef.current = requestAnimationFrame(apply);
   }, []);
@@ -88,7 +85,7 @@ export default function Object3DViewer({ src, alt, className = '', layers = 6 }:
   useEffect(() => {
     rafRef.current = requestAnimationFrame(apply);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [apply, hasDepth]);
+  }, [apply]);
 
   const onDown = (x: number, y: number) => {
     dragging.current = true; lastPt.current = { x, y };
@@ -97,8 +94,8 @@ export default function Object3DViewer({ src, alt, className = '', layers = 6 }:
   const onMove = (x: number, y: number) => {
     if (!dragging.current) return;
     const dx = x - lastPt.current.x, dy = y - lastPt.current.y;
-    target.current.ry = clamp(target.current.ry + dx * 0.4, -34, 34);
-    target.current.rx = clamp(target.current.rx - dy * 0.3, -26, 26);
+    target.current.ry = clamp(target.current.ry + dx * 0.4, -32, 32);
+    target.current.rx = clamp(target.current.rx - dy * 0.3, -24, 24);
     velocity.current = { x: dx * 0.4, y: dy * 0.3 };
     lastPt.current = { x, y };
   };
@@ -106,12 +103,18 @@ export default function Object3DViewer({ src, alt, className = '', layers = 6 }:
   const zoom = (d: number) => { target.current.zoom = clamp(target.current.zoom + d, 0.7, 2.2); };
   const reset = () => { target.current = { rx: -3, ry: 0, zoom: 1 }; velocity.current = { x: 0, y: 0 }; startTs.current = performance.now(); };
 
-  // слои: каждый слой = вырезка, маскированная диапазоном глубины
-  const depthLayers = Array.from({ length: layers }, (_, i) => {
-    const lo = i / layers;
-    const hi = (i + 1) / layers;
-    return { lo, hi };
-  });
+  const depthStyle: React.CSSProperties = depthUrl
+    ? {
+        WebkitMaskImage: `url(${depthUrl})`,
+        maskImage: `url(${depthUrl})`,
+        WebkitMaskSize: 'contain',
+        maskSize: 'contain',
+        WebkitMaskRepeat: 'no-repeat',
+        maskRepeat: 'no-repeat',
+        WebkitMaskPosition: 'center',
+        maskPosition: 'center',
+      }
+    : {};
 
   return (
     <div
@@ -128,32 +131,29 @@ export default function Object3DViewer({ src, alt, className = '', layers = 6 }:
       onTouchMove={(e) => { const t = e.touches[0]; if (t) onMove(t.clientX, t.clientY); }}
       onTouchEnd={onUp}
     >
-      <div data-glow className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(circle at 50% 38%, rgba(255,255,255,0.6), rgba(255,255,255,0) 60%)' }} />
-
+      <div data-glow className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(circle at 50% 38%, rgba(255,255,255,0.55), rgba(255,255,255,0) 60%)' }} />
       <div data-shadow className="absolute left-1/2 bottom-[8%] w-[50%] h-[6%] rounded-[50%] bg-black blur-2xl will-change-transform" style={{ opacity: 0.28 }} />
 
-      {/* сцена */}
+      {/* сцена с предметом */}
       <div
         ref={stageRef}
         className="absolute will-change-transform"
         style={{ left: '12%', right: '12%', top: '8%', bottom: '16%', transformStyle: 'preserve-3d', transition: 'none' }}
       >
-        {hasDepth ? (
-          depthLayers.map((lr, i) => (
-            <div
-              key={i}
-              ref={(n) => { if (n) layerEls.current[i] = n; }}
-              className="absolute inset-0 will-change-transform"
-              style={{
-                transformStyle: 'preserve-3d',
-                filter: `brightness(${0.9 + (i / layers) * 0.18})`,
-              }}
-            >
-              <DepthSlice src={url} depth={depthUrl} lo={lr.lo} hi={lr.hi} alt={i === 0 ? alt : ''} />
-            </div>
-          ))
-        ) : (
-          <img src={url} alt={alt} draggable={false} className="w-full h-full object-contain drop-shadow-[0_22px_30px_rgba(0,0,0,0.3)] pointer-events-none" />
+        {/* базовый слой предмета — всегда виден */}
+        <img
+          src={url}
+          alt={alt}
+          draggable={false}
+          className="absolute inset-0 w-full h-full object-contain drop-shadow-[0_22px_30px_rgba(0,0,0,0.3)] pointer-events-none"
+        />
+
+        {/* объёмный передний слой по карте глубины (параллакс + свет) */}
+        {depthUrl && (
+          <div data-depth className="absolute inset-0 will-change-transform pointer-events-none" style={depthStyle}>
+            <img src={url} alt="" aria-hidden draggable={false} className="absolute inset-0 w-full h-full object-contain" />
+            <div data-shade className="absolute inset-0" style={{ mixBlendMode: 'soft-light', ...depthStyle }} />
+          </div>
         )}
       </div>
 
@@ -180,58 +180,6 @@ export default function Object3DViewer({ src, alt, className = '', layers = 6 }:
       </div>
     </div>
   );
-}
-
-/**
- * Один «срез» предмета по глубине [lo..hi].
- * Маска глубины + clip по яркости через SVG-фильтр невозможны просто,
- * поэтому используем canvas: оставляем пиксели, чья глубина в диапазоне.
- */
-function DepthSlice({ src, depth, lo, hi, alt }: { src: string; depth: string; lo: number; hi: number; alt: string }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const cv = canvasRef.current;
-    if (!cv) return;
-    let alive = true;
-    const img = new Image();
-    const dep = new Image();
-    img.crossOrigin = 'anonymous';
-    dep.crossOrigin = 'anonymous';
-    let loaded = 0;
-    const draw = () => {
-      if (!alive || loaded < 2) return;
-      const w = img.naturalWidth, h = img.naturalHeight;
-      if (!w || !h) return;
-      cv.width = w; cv.height = h;
-      const ctx = cv.getContext('2d');
-      if (!ctx) return;
-      ctx.drawImage(img, 0, 0);
-      const base = ctx.getImageData(0, 0, w, h);
-
-      const dc = document.createElement('canvas');
-      dc.width = w; dc.height = h;
-      const dctx = dc.getContext('2d');
-      if (!dctx) return;
-      dctx.drawImage(dep, 0, 0, w, h);
-      const dData = dctx.getImageData(0, 0, w, h).data;
-
-      const loV = lo * 255, hiV = hi * 255;
-      const px = base.data;
-      for (let i = 0; i < px.length; i += 4) {
-        const dv = dData[i]; // глубина (灰)
-        if (dv < loV || dv > hiV) px[i + 3] = 0; // вне среза — прозрачно
-      }
-      ctx.putImageData(base, 0, 0);
-    };
-    img.onload = () => { loaded++; draw(); };
-    dep.onload = () => { loaded++; draw(); };
-    img.src = src;
-    dep.src = depth;
-    return () => { alive = false; };
-  }, [src, depth, lo, hi]);
-
-  return <canvas ref={canvasRef} aria-label={alt} className="w-full h-full object-contain" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />;
 }
 
 function Ctrl({ icon, onClick, title, active }: { icon: string; onClick: () => void; title: string; active?: boolean }) {
