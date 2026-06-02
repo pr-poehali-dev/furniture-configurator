@@ -18,81 +18,120 @@ def _cors():
     }
 
 
-def _edge_palette(px, W, H, step=6):
-    '''Собирает эталонные цвета фона по всему периметру кадра.'''
-    samples = []
-    for x in range(0, W, step):
-        samples.append(px[x, 0][:3])
-        samples.append(px[x, H - 1][:3])
-    for y in range(0, H, step):
-        samples.append(px[0, y][:3])
-        samples.append(px[W - 1, y][:3])
-    # кластеризуем грубо: усредняем близкие оттенки в несколько «ключевых» цветов
-    palette = []
-    for s in samples:
-        placed = False
-        for p in palette:
-            if (s[0] - p[0]) ** 2 + (s[1] - p[1]) ** 2 + (s[2] - p[2]) ** 2 < 30 * 30:
-                placed = True
-                break
-        if not placed:
-            palette.append(s)
-        if len(palette) >= 6:
-            break
-    return palette or [(255, 255, 255)]
+def _bg_stats(px, W, H):
+    '''Оценивает средний цвет и разброс (шум) фона по тонкой рамке у краёв.'''
+    rs, gs, bs = [], [], []
+    band = max(2, min(W, H) // 60)
+    for x in range(0, W, 2):
+        for y in list(range(band)) + list(range(H - band, H)):
+            r, g, b = px[x, y][:3]
+            rs.append(r); gs.append(g); bs.append(b)
+    for y in range(0, H, 2):
+        for x in list(range(band)) + list(range(W - band, W)):
+            r, g, b = px[x, y][:3]
+            rs.append(r); gs.append(g); bs.append(b)
+    n = len(rs) or 1
+    mr, mg, mb = sum(rs) / n, sum(gs) / n, sum(bs) / n
+    var = sum((rs[i] - mr) ** 2 + (gs[i] - mg) ** 2 + (bs[i] - mb) ** 2 for i in range(n)) / n
+    std = var ** 0.5
+    return (mr, mg, mb), std
 
 
-def _remove_bg(src_bytes, tol=46):
-    '''Аккуратно вырезает предмет: многоцветный flood-fill от краёв,
-    anti-halo, мягкая растушёвка краёв, обрезка по содержимому.'''
-    img = Image.open(io.BytesIO(src_bytes)).convert('RGBA')
-    base_w = 640
-    scale = base_w / img.width if img.width > base_w else 1.0
-    work = img.resize((int(img.width * scale), int(img.height * scale))) if scale != 1.0 else img.copy()
-
-    W, H = work.size
-    px = work.load()
-
-    palette = _edge_palette(px, W, H)
-    tol2 = tol * tol * 3
-
-    def is_bg(r, g, b):
-        for pr, pg, pb in palette:
-            dr, dg, db = r - pr, g - pg, b - pb
-            if dr * dr + dg * dg + db * db <= tol2:
-                return True
-        return False
-
-    # seed-точки по всему периметру (устойчивость к неоднородному фону)
+def _flood_bg(px, W, H, mr, mg, mb, tol2):
+    '''Заливка фона ТОЛЬКО от внешней рамки — фон должен быть связным с краем.
+    Это не даёт «прогрызать» внутренние области предмета.'''
     visited = bytearray(W * H)
     transparent = bytearray(W * H)
+    q = deque()
+
+    def seed(x, y):
+        i = y * W + x
+        if not visited[i]:
+            r, g, b = px[x, y][:3]
+            dr, dg, db = r - mr, g - mg, b - mb
+            visited[i] = 1
+            if dr * dr + dg * dg + db * db <= tol2:
+                transparent[i] = 1
+                q.append((x, y))
+
+    for x in range(W):
+        seed(x, 0); seed(x, H - 1)
+    for y in range(H):
+        seed(0, y); seed(W - 1, y)
+
+    while q:
+        x, y = q.popleft()
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if 0 <= nx < W and 0 <= ny < H:
+                j = ny * W + nx
+                if not visited[j]:
+                    visited[j] = 1
+                    r, g, b = px[nx, ny][:3]
+                    dr, dg, db = r - mr, g - mg, b - mb
+                    if dr * dr + dg * dg + db * db <= tol2:
+                        transparent[j] = 1
+                        q.append((nx, ny))
+    return transparent
+
+
+def _fill_holes(mask):
+    '''Заполняет дыры внутри предмета: всё, что НЕ достижимо снаружи, — предмет.'''
+    W, H = mask.size
+    inv = mask.point(lambda v: 0 if v > 127 else 255)  # фон=255
+    ipx = inv.load()
+    outside = bytearray(W * H)
     q = deque()
     for x in range(W):
         for y in (0, H - 1):
             i = y * W + x
-            if not visited[i]:
-                visited[i] = 1
-                q.append((x, y))
+            if ipx[x, y] > 127 and not outside[i]:
+                outside[i] = 1; q.append((x, y))
     for y in range(H):
         for x in (0, W - 1):
             i = y * W + x
-            if not visited[i]:
-                visited[i] = 1
-                q.append((x, y))
-
+            if ipx[x, y] > 127 and not outside[i]:
+                outside[i] = 1; q.append((x, y))
     while q:
         x, y = q.popleft()
-        r, g, b, _ = px[x, y]
-        if is_bg(r, g, b):
-            transparent[y * W + x] = 1
-            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
-                if 0 <= nx < W and 0 <= ny < H:
-                    j = ny * W + nx
-                    if not visited[j]:
-                        visited[j] = 1
-                        q.append((nx, ny))
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if 0 <= nx < W and 0 <= ny < H:
+                j = ny * W + nx
+                if not outside[j] and ipx[nx, ny] > 127:
+                    outside[j] = 1; q.append((nx, ny))
+    out = mask.copy()
+    opx = out.load()
+    for y in range(H):
+        row = y * W
+        for x in range(W):
+            if not outside[row + x]:
+                opx[x, y] = 255  # внутренняя дыра -> предмет
+    return out
 
-    # маска: 255 = предмет, 0 = фон
+
+def _remove_bg(src_bytes):
+    '''Ювелирная вырезка предмета без потери его частей:
+    заливка фона только от рамки + адаптивный допуск + заполнение дыр.'''
+    img = Image.open(io.BytesIO(src_bytes)).convert('RGBA')
+    base_w = 720
+    scale = base_w / img.width if img.width > base_w else 1.0
+    work = img.resize((max(1, int(img.width * scale)), max(1, int(img.height * scale)))) if scale != 1.0 else img.copy()
+
+    W, H = work.size
+    px = work.load()
+
+    (mr, mg, mb), std = _bg_stats(px, W, H)
+    # адаптивный допуск: чем «шумнее» фон, тем больше, но в безопасных рамках
+    tol = max(28, min(70, std * 2.2 + 24))
+    tol2 = tol * tol * 3
+
+    transparent = _flood_bg(px, W, H, mr, mg, mb, tol2)
+
+    # если выгрызли почти всё (фон сложный) — ослабляем и пробуем мягче
+    bg_count = sum(transparent)
+    if bg_count > W * H * 0.92 or bg_count < W * H * 0.04:
+        tol2b = (max(22, tol * 0.7)) ** 2 * 3
+        transparent = _flood_bg(px, W, H, mr, mg, mb, tol2b)
+
     mask = Image.new('L', (W, H), 255)
     mpx = mask.load()
     for y in range(H):
@@ -101,13 +140,13 @@ def _remove_bg(src_bytes, tol=46):
             if transparent[row + x]:
                 mpx[x, y] = 0
 
-    # anti-halo: сжимаем контур, чтобы убрать светлый ореол фона по краю
-    mask = mask.filter(ImageFilter.MinFilter(3))
-    # мягкая растушёвка краёв
-    mask = mask.filter(ImageFilter.GaussianBlur(1.6))
-    # повышаем контраст альфы (резкая граница, но сглаженная)
-    mask = mask.point(lambda v: 0 if v < 90 else (255 if v > 170 else int((v - 90) / 80 * 255)))
-    mask = mask.filter(ImageFilter.GaussianBlur(0.8))
+    # убрать мелкий «шум» фона у краёв предмета, не трогая тело
+    mask = mask.filter(ImageFilter.MedianFilter(3))
+    # вернуть внутренние дыры (стекло, просветы) предмету
+    mask = _fill_holes(mask)
+    # мягкая, симметричная растушёвка края (без эрозии тела)
+    mask = mask.filter(ImageFilter.GaussianBlur(1.0))
+    mask = mask.point(lambda v: 0 if v < 60 else (255 if v > 195 else int((v - 60) / 135 * 255)))
 
     if mask.size != img.size:
         mask = mask.resize(img.size, Image.LANCZOS)
@@ -115,8 +154,7 @@ def _remove_bg(src_bytes, tol=46):
 
     bbox = img.getbbox()
     if bbox:
-        # небольшой отступ, чтобы предмет не упирался в края
-        pad = max(4, (bbox[2] - bbox[0]) // 40)
+        pad = max(6, (bbox[2] - bbox[0]) // 30)
         bbox = (max(0, bbox[0] - pad), max(0, bbox[1] - pad),
                 min(img.width, bbox[2] + pad), min(img.height, bbox[3] + pad))
         img = img.crop(bbox)
@@ -160,7 +198,7 @@ def handler(event, context):
     access_key = os.environ['AWS_ACCESS_KEY_ID']
     secret_key = os.environ['AWS_SECRET_ACCESS_KEY']
 
-    digest = hashlib.md5(('v2:' + image_url).encode('utf-8')).hexdigest()
+    digest = hashlib.md5(('v3:' + image_url).encode('utf-8')).hexdigest()
     key = f'cutout/{digest}.png'
     cdn_url = f'https://cdn.poehali.dev/projects/{access_key}/bucket/{key}'
 

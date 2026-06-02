@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { BACKEND } from '@/lib/backend';
 
 const MEM = new Map<string, string>();
-const STORAGE = 'artora_cutouts_v2';
+const STORAGE = 'artora_cutouts_v3';
 
 function loadStore(): Record<string, string> {
   try {
