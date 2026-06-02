@@ -62,7 +62,7 @@ export default function WhyUsSection() {
             <h2 className="section-title text-4xl lg:text-5xl mt-3">
               Почему выбирают
               <br />
-              <em className="font-cormorant not-italic text-[#8B4513]">ARTORA</em>
+              <em className="font-cormorant not-italic text-[#8B4513]">Artora-ai</em>
             </h2>
           </div>
           <p className="font-opensans text-[#888] max-w-sm text-sm leading-relaxed">

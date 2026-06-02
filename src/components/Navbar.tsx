@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Icon from '@/components/ui/icon';
+import { useCart } from '@/context/CartContext';
 
 const navLinks = [
   { label: 'Главная', href: '#hero' },
@@ -13,6 +15,9 @@ const navLinks = [
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const { count, setOpen } = useCart();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -22,6 +27,10 @@ export default function Navbar() {
 
   const handleNav = (href: string) => {
     setMenuOpen(false);
+    if (location.pathname !== '/') {
+      navigate('/' + href);
+      return;
+    }
     const el = document.querySelector(href);
     if (el) el.scrollIntoView({ behavior: 'smooth' });
   };
@@ -35,9 +44,9 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-6 lg:px-12 flex items-center justify-between h-16 lg:h-20">
         <button
           onClick={() => handleNav('#hero')}
-          className="font-montserrat font-900 text-xl tracking-[0.15em] text-[#1A1A1A] uppercase"
+          className="font-montserrat font-900 text-xl tracking-[0.12em] text-[#1A1A1A]"
         >
-          ARTORA
+          ARTORA<span className="text-[#A0784A]">-ai</span>
         </button>
 
         <nav className="hidden lg:flex items-center gap-8">
@@ -52,20 +61,35 @@ export default function Navbar() {
           ))}
         </nav>
 
-        <button
-          onClick={() => handleNav('#constructor')}
-          className="hidden lg:block artora-btn-primary text-xs py-3 px-6"
-        >
-          Начать сборку
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setOpen(true)}
+            className="relative p-2.5 text-[#1A1A1A] hover:text-[#8B4513] transition-colors"
+            aria-label="Корзина"
+          >
+            <Icon name="ShoppingBag" size={22} />
+            {count > 0 && (
+              <span className="absolute top-0 right-0 min-w-[18px] h-[18px] px-1 bg-[#8B4513] text-white rounded-full text-[10px] font-montserrat font-700 flex items-center justify-center">
+                {count}
+              </span>
+            )}
+          </button>
 
-        <button
-          className="lg:hidden p-2 text-[#1A1A1A]"
-          onClick={() => setMenuOpen(!menuOpen)}
-          aria-label="Меню"
-        >
-          <Icon name={menuOpen ? 'X' : 'Menu'} size={24} />
-        </button>
+          <button
+            onClick={() => handleNav('#catalog')}
+            className="hidden lg:block artora-btn-primary text-xs py-3 px-6"
+          >
+            В каталог
+          </button>
+
+          <button
+            className="lg:hidden p-2 text-[#1A1A1A]"
+            onClick={() => setMenuOpen(!menuOpen)}
+            aria-label="Меню"
+          >
+            <Icon name={menuOpen ? 'X' : 'Menu'} size={24} />
+          </button>
+        </div>
       </div>
 
       {menuOpen && (
@@ -80,10 +104,10 @@ export default function Navbar() {
             </button>
           ))}
           <button
-            onClick={() => handleNav('#constructor')}
+            onClick={() => handleNav('#catalog')}
             className="artora-btn-primary text-xs py-3 mt-2"
           >
-            Начать сборку
+            В каталог
           </button>
         </div>
       )}

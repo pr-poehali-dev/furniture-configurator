@@ -12,23 +12,11 @@ import {
   HARDWARE,
   FURNITURE_TYPES,
   Option,
-  FurnitureType,
 } from './constructor/types';
-import SketchTool from './constructor/SketchTool';
 import RoomTryOn from './constructor/RoomTryOn';
 import ConstructorHeader from './constructor/ConstructorHeader';
 import ConfigPanel from './constructor/ConfigPanel';
 import ConstructorViewer from './constructor/ConstructorViewer';
-
-const VALID = {
-  furniture: ['table', 'shelf', 'nightstand'],
-  material: ['oak', 'walnut', 'white'],
-  size: ['s', 'm', 'l'],
-  thickness: ['t2', 't3'],
-  legsStyle: ['classic', 'cone', 'metal'],
-  legsHeight: ['h70', 'h75', 'h80'],
-  hardware: ['none', 'h1', 'h2', 'h3'],
-} as const;
 
 export default function ConstructorSection() {
   const [config, setConfig] = useState<Config>(DEFAULT_CONFIG);
@@ -81,22 +69,6 @@ export default function ConstructorSection() {
     }
   };
 
-  const applyFromSketch = (partial: Partial<Config>) => {
-    setConfig((prev) => {
-      const next = { ...prev };
-      (Object.keys(VALID) as (keyof typeof VALID)[]).forEach((key) => {
-        const val = partial[key];
-        if (val && (VALID[key] as readonly string[]).includes(val)) {
-          if (key === 'furniture') next.furniture = val as FurnitureType;
-          else (next[key] as string) = val;
-        }
-      });
-      return next;
-    });
-    setGalleryIdx(0);
-    document.querySelector('#constructor-3d')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  };
-
   const labelOf = (arr: Option[], id: string) => arr.find((o) => o.id === id)?.label ?? '';
 
   const exportImage = async () => {
@@ -139,7 +111,7 @@ export default function ConstructorSection() {
       ctx.fillStyle = '#ffffff';
       ctx.font = '900 44px Montserrat, sans-serif';
       ctx.textBaseline = 'top';
-      ctx.fillText('ARTORA', 60, 44);
+      ctx.fillText('ARTORA-ai', 60, 44);
       ctx.fillStyle = '#A0784A';
       ctx.font = '700 16px Montserrat, sans-serif';
       ctx.fillText('МЕБЕЛЬ НА ЗАКАЗ · ВАША КОНФИГУРАЦИЯ', 60, 92);
@@ -226,11 +198,6 @@ export default function ConstructorSection() {
                 sending={sending}
                 submitLead={submitLead}
               />
-            </div>
-
-            {/* Sketch → 3D helper */}
-            <div className="mt-8">
-              <SketchTool onApply={applyFromSketch} />
             </div>
           </>
         )}

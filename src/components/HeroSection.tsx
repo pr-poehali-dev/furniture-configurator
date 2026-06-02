@@ -52,7 +52,7 @@ export default function HeroSection() {
           <div className="flex flex-col gap-6">
             <div data-animate className="flex items-center gap-3">
               <div className="w-8 h-[2px] bg-[#A0784A]" />
-              <span className="section-label">Мебель на заказ · Artora.ru</span>
+              <span className="section-label">Интернет-магазин мебели · Artora-ai.ru</span>
             </div>
 
             <h1
@@ -60,31 +60,31 @@ export default function HeroSection() {
               className="font-montserrat font-900 text-[#1A1A1A] leading-[0.95] text-balance"
               style={{ fontSize: 'clamp(2.8rem, 7vw, 6rem)' }}
             >
-              Создай мебель
+              Мебель,
               <br />
               <em className="font-cormorant not-italic" style={{ color: '#8B4513' }}>
-                своей мечты
+                которую видно
               </em>
               <br />
-              за 5 минут
+              в 3D и в вашей комнате
             </h1>
 
             <p
               data-animate
               className="font-opensans text-[#666] text-base lg:text-lg leading-relaxed max-w-md"
             >
-              Конфигурируйте размер, материал и фурнитуру — видите итоговую цену сразу.
-              Производство в России, доставка по всей стране.
+              Крутите товар в 3D, примеряйте к интерьеру и заказывайте онлайн.
+              ИИ-продавец Артур подберёт мебель под ваш запрос и бюджет.
             </p>
 
             <div data-animate className="flex flex-col sm:flex-row gap-4 mt-2">
-              <button onClick={scrollToConstructor} className="artora-btn-primary flex items-center justify-center gap-3">
-                <Icon name="Wrench" size={16} />
-                Начать сборку
-              </button>
-              <button onClick={scrollToCatalog} className="artora-btn-outline flex items-center justify-center gap-3">
+              <button onClick={scrollToCatalog} className="artora-btn-primary flex items-center justify-center gap-3">
                 <Icon name="Grid3x3" size={16} />
-                Смотреть каталог
+                Открыть каталог
+              </button>
+              <button onClick={scrollToConstructor} className="artora-btn-outline flex items-center justify-center gap-3">
+                <Icon name="Wrench" size={16} />
+                Собрать своё
               </button>
             </div>
 
@@ -108,7 +108,7 @@ export default function HeroSection() {
             <div className="relative">
               <img
                 src="https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/385d599c-9784-4c7d-910a-e11d258dc978.jpg"
-                alt="Дизайнерский стол ARTORA"
+                alt="Дизайнерский стол Artora-ai"
                 className="w-full h-[520px] object-cover"
                 loading="eager"
               />

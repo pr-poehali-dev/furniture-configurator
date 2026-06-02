@@ -6,10 +6,10 @@ type Msg = { role: 'user' | 'assistant'; content: string };
 
 const WELCOME: Msg = {
   role: 'assistant',
-  content: 'Здравствуйте! Я Артур, консультант ARTORA. Помогу подобрать мебель мечты. Расскажите, что вы ищете — стол, стеллаж, тумбу?',
+  content: 'Здравствуйте! Я Артур, ИИ-продавец Artora-ai. Помогу выбрать мебель из каталога под ваш запрос и бюджет. Что ищете — стол, диван, шкаф, кухню?',
 };
 
-const QUICK = ['Хочу обеденный стол', 'Нужен стеллаж в гостиную', 'Подберите тумбу у кровати'];
+const QUICK = ['Подберите диван в гостиную', 'Нужна кухня до 150 000 ₽', 'Какой стол выбрать из дуба?'];
 
 function getSessionId() {
   try {
@@ -90,7 +90,7 @@ export default function AIChatWidget() {
               <Icon name="Bot" size={20} />
             </div>
             <div className="flex-1">
-              <p className="font-montserrat font-700 text-sm">Артур · ИИ-консультант</p>
+              <p className="font-montserrat font-700 text-sm">Артур · ИИ-продавец</p>
               <p className="font-opensans text-[#A0784A] text-[11px] flex items-center gap-1">
                 <span className="w-1.5 h-1.5 bg-green-400 rounded-full" />
                 на связи

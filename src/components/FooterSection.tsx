@@ -19,12 +19,12 @@ export default function FooterSection() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-10 pb-12 border-b border-white/10">
           {/* Brand */}
           <div className="md:col-span-2">
-            <div className="font-montserrat font-900 text-2xl tracking-[0.15em] uppercase mb-4">
-              ARTORA
+            <div className="font-montserrat font-900 text-2xl tracking-[0.12em] mb-4">
+              ARTORA<span className="text-[#A0784A]">-ai</span>
             </div>
             <p className="font-opensans text-white/50 text-sm leading-relaxed max-w-xs">
-              Производим мебель на заказ с 2009 года. Экоматериалы, точные размеры,
-              доставка по всей России.
+              Интернет-магазин мебели с 3D-просмотром, примеркой в интерьере и ИИ-продавцом.
+              Экоматериалы, точные размеры, доставка по всей России.
             </p>
             <div className="flex gap-3 mt-6">
               {[
@@ -74,7 +74,7 @@ export default function FooterSection() {
               </div>
               <div className="flex items-start gap-2">
                 <Icon name="Mail" size={14} className="text-[#A0784A] mt-0.5 flex-shrink-0" />
-                <span className="font-opensans text-white/70 text-sm">hello@artora.ru</span>
+                <span className="font-opensans text-white/70 text-sm">hello@artora-ai.ru</span>
               </div>
               <div className="flex items-start gap-2">
                 <Icon name="MapPin" size={14} className="text-[#A0784A] mt-0.5 flex-shrink-0" />
@@ -86,7 +86,7 @@ export default function FooterSection() {
 
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="font-opensans text-white/30 text-xs">
-            © 2024 ARTORA. Все права защищены.
+            © 2024 Artora-ai. Все права защищены.
           </p>
           <div className="flex gap-6">
             <button className="font-opensans text-white/30 text-xs hover:text-white/60 transition-colors">

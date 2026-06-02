@@ -95,7 +95,7 @@ export default function RoomTryOn({ config, warm }: { config: Config; warm: bool
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
       ctx.font = '900 28px Montserrat, sans-serif';
       ctx.textBaseline = 'bottom';
-      ctx.fillText('ARTORA', 28, H - 24);
+      ctx.fillText('ARTORA-ai', 28, H - 24);
 
       const link = document.createElement('a');
       link.download = `artora-interior-${Date.now()}.png`;
