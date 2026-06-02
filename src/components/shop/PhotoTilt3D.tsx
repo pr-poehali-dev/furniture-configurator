@@ -50,15 +50,29 @@ export default function PhotoTilt3D({
     c.scale += (tg.scale - c.scale) * 0.1;
 
     const obj = el.querySelector('[data-obj]') as HTMLElement | null;
+    const refl = el.querySelector('[data-refl]') as HTMLElement | null;
     const shadow = el.querySelector('[data-shadow]') as HTMLElement | null;
+    const shadowCore = el.querySelector('[data-shadow-core]') as HTMLElement | null;
+    const float = Math.sin((performance.now() - startTs.current) / 1000 * 1.1) * 6;
     if (obj) {
-      const float = Math.sin((performance.now() - startTs.current) / 1000 * 1.1) * 6;
       obj.style.transform = `translateY(${float}px) rotateX(${c.rx}deg) rotateY(${c.ry}deg) scale(${c.scale})`;
+    }
+    if (refl) {
+      // отражение синхронно с предметом, перевёрнуто по Y
+      refl.style.transform = `translateY(${-float * 0.5}px) rotateX(${c.rx}deg) rotateY(${c.ry}deg) scale(${c.scale}) scaleY(-1)`;
+      refl.style.opacity = `${Math.max(0, 0.22 - Math.abs(c.ry) / 220)}`;
     }
     if (shadow) {
       const off = c.ry * 1.6;
-      shadow.style.transform = `translateX(calc(-50% + ${off}px)) scale(${1 - Math.abs(c.ry) / 110})`;
-      shadow.style.opacity = `${0.4 - Math.abs(c.ry) / 130}`;
+      const lift = Math.abs(float) / 6;
+      shadow.style.transform = `translateX(calc(-50% + ${off}px)) scale(${(1 - Math.abs(c.ry) / 110) * (1 + lift * 0.12)})`;
+      shadow.style.opacity = `${0.38 - Math.abs(c.ry) / 130 - lift * 0.06}`;
+    }
+    if (shadowCore) {
+      const off = c.ry * 1.6;
+      const lift = Math.abs(float) / 6;
+      shadowCore.style.transform = `translateX(calc(-50% + ${off}px)) scale(${(1 - Math.abs(c.ry) / 90) * (1 - lift * 0.18)})`;
+      shadowCore.style.opacity = `${0.5 - Math.abs(c.ry) / 110 - lift * 0.12}`;
     }
 
     rafRef.current = requestAnimationFrame(apply);
@@ -104,13 +118,40 @@ export default function PhotoTilt3D({
       }}
     >
       {/* мягкий радиальный свет за предметом */}
-      <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(circle at 50% 42%, rgba(255,255,255,0.55), rgba(255,255,255,0) 60%)' }} />
+      <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(circle at 50% 40%, rgba(255,255,255,0.6), rgba(255,255,255,0) 60%)' }} />
 
-      {/* динамическая тень под предметом */}
+      {/* зеркальное отражение под предметом */}
+      <div
+        data-refl
+        className="absolute inset-[10%] m-auto will-change-transform pointer-events-none"
+        style={{
+          top: '52%',
+          transformStyle: 'preserve-3d',
+          transition: 'none',
+          opacity: 0.2,
+          WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.6), transparent 55%)',
+          maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.6), transparent 55%)',
+        }}
+      >
+        <img
+          src={url}
+          alt=""
+          aria-hidden
+          draggable={false}
+          className="w-full h-full object-contain object-top select-none"
+        />
+      </div>
+
+      {/* двухслойная контактная тень */}
       <div
         data-shadow
-        className="absolute left-1/2 bottom-[10%] w-[55%] h-[7%] rounded-[50%] bg-black blur-xl"
-        style={{ opacity: 0.35 }}
+        className="absolute left-1/2 bottom-[11%] w-[58%] h-[8%] rounded-[50%] bg-black blur-2xl"
+        style={{ opacity: 0.36 }}
+      />
+      <div
+        data-shadow-core
+        className="absolute left-1/2 bottom-[12%] w-[34%] h-[4%] rounded-[50%] bg-black blur-md"
+        style={{ opacity: 0.48 }}
       />
 
       {/* парящий предмет (с удалённым фоном) */}
