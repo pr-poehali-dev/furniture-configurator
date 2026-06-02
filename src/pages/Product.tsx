@@ -87,6 +87,11 @@ export default function Product() {
               {product.badge && (
                 <span className={`ml-2 font-montserrat font-700 text-[9px] uppercase tracking-widest px-2 py-0.5 ${product.badge === 'Скидка' ? 'bg-[#8B4513] text-white' : 'bg-[#F0E8DC] text-[#1A1A1A]'}`}>{product.badge}</span>
               )}
+              {product.eco && (
+                <span className="flex items-center gap-1 font-montserrat font-700 text-[9px] uppercase tracking-widest px-2 py-0.5 bg-[#4CAF50] text-white">
+                  <Icon name="Leaf" size={10} /> Эко
+                </span>
+              )}
             </div>
 
             <h1 className="font-montserrat font-900 text-[#1A1A1A] text-3xl lg:text-4xl leading-tight">{product.title}</h1>

@@ -40,6 +40,15 @@ function ProductCard({ p }: { p: Product }) {
           </div>
         )}
 
+        {p.eco && !show3d && (
+          <div className="absolute top-3 right-3">
+            <span className="flex items-center gap-1 font-montserrat font-700 text-[10px] uppercase tracking-widest px-2.5 py-1 bg-[#4CAF50] text-white">
+              <Icon name="Leaf" size={11} />
+              Эко
+            </span>
+          </div>
+        )}
+
         <button
           onClick={() => setShow3d((v) => !v)}
           className="absolute bottom-3 right-3 bg-white/90 backdrop-blur text-[#1A1A1A] font-montserrat font-700 text-[10px] uppercase tracking-widest px-3 py-2 flex items-center gap-1 hover:bg-[#1A1A1A] hover:text-white transition-colors"
@@ -80,13 +89,15 @@ export default function CatalogSection() {
   const [category, setCategory] = useState('all');
   const [materialFilter, setMaterialFilter] = useState('Все');
   const [priceMax, setPriceMax] = useState(220000);
+  const [ecoOnly, setEcoOnly] = useState(false);
   const [visibleCount, setVisibleCount] = useState(8);
 
   const filtered = products.filter((p) => {
     const byCat = category === 'all' || p.category === category;
     const byMat = materialFilter === 'Все' || p.material === materialFilter;
     const byPrice = p.price <= priceMax;
-    return byCat && byMat && byPrice;
+    const byEco = !ecoOnly || p.eco;
+    return byCat && byMat && byPrice && byEco;
   });
 
   const visible = filtered.slice(0, visibleCount);
@@ -155,6 +166,19 @@ export default function CatalogSection() {
               onChange={(e) => setPriceMax(Number(e.target.value))}
               className="w-full accent-[#8B4513]"
             />
+          </div>
+          <div className="flex items-end">
+            <button
+              onClick={() => { setEcoOnly((v) => !v); setVisibleCount(8); }}
+              className={`flex items-center gap-2 px-4 py-2 font-montserrat font-700 text-[11px] uppercase tracking-widest border transition-all duration-200 ${
+                ecoOnly
+                  ? 'bg-[#4CAF50] text-white border-[#4CAF50]'
+                  : 'border-[#E8E0D4] text-[#666] hover:border-[#4CAF50] hover:text-[#4CAF50]'
+              }`}
+            >
+              <Icon name="Leaf" size={14} />
+              Только эко
+            </button>
           </div>
         </div>
 

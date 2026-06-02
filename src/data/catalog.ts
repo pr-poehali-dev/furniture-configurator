@@ -52,31 +52,32 @@ export type Product = {
   material: string;
   img: string;
   badge?: string;
+  eco?: boolean;
   desc: string;
 };
 
 const raw: Omit<Product, 'desc'>[] = [
-  { id: 1, title: 'Обеденный стол «Нордик»', price: 28900, category: 'tables', style: 'Скандинавский', material: 'Дуб', img: IMG.table, badge: 'Хит' },
-  { id: 2, title: 'Кофейный столик «Уолнат»', price: 18500, oldPrice: 22000, category: 'tables', style: 'Лофт', material: 'Орех', img: IMG.coffee, badge: 'Скидка' },
+  { id: 1, title: 'Обеденный стол «Нордик»', price: 28900, category: 'tables', style: 'Скандинавский', material: 'Дуб', img: IMG.table, badge: 'Хит', eco: true },
+  { id: 2, title: 'Кофейный столик «Уолнат»', price: 18500, oldPrice: 22000, category: 'tables', style: 'Лофт', material: 'Орех', img: IMG.coffee, badge: 'Скидка', eco: true },
   { id: 3, title: 'Письменный стол «Бланш»', price: 22400, category: 'tables', style: 'Минимализм', material: 'Белый лак', img: IMG.desk },
   { id: 4, title: 'Барный стол «Индастриал»', price: 38000, category: 'tables', style: 'Лофт', material: 'Металл', img: IMG.coffee },
 
-  { id: 5, title: 'Диван «Осло» 3-местный', price: 64900, category: 'sofas', style: 'Скандинавский', material: 'Ткань', img: IMG.sofa, badge: 'Хит' },
+  { id: 5, title: 'Диван «Осло» 3-местный', price: 64900, category: 'sofas', style: 'Скандинавский', material: 'Ткань', img: IMG.sofa, badge: 'Хит', eco: true },
   { id: 6, title: 'Диван «Берген» угловой', price: 89500, oldPrice: 98000, category: 'sofas', style: 'Минимализм', material: 'Ткань', img: IMG.sofa, badge: 'Скидка' },
-  { id: 7, title: 'Кресло «Стокгольм»', price: 32400, category: 'sofas', style: 'Скандинавский', material: 'Ткань', img: IMG.sofa },
+  { id: 7, title: 'Кресло «Стокгольм»', price: 32400, category: 'sofas', style: 'Скандинавский', material: 'Ткань', img: IMG.sofa, eco: true },
 
-  { id: 8, title: 'Шкаф-купе «Модерн»', price: 54200, category: 'wardrobes', style: 'Минимализм', material: 'Дуб', img: IMG.wardrobe, badge: 'Хит' },
-  { id: 9, title: 'Гардероб «Лофт»', price: 47800, category: 'wardrobes', style: 'Лофт', material: 'Орех', img: IMG.wardrobe },
+  { id: 8, title: 'Шкаф-купе «Модерн»', price: 54200, category: 'wardrobes', style: 'Минимализм', material: 'Дуб', img: IMG.wardrobe, badge: 'Хит', eco: true },
+  { id: 9, title: 'Гардероб «Лофт»', price: 47800, category: 'wardrobes', style: 'Лофт', material: 'Орех', img: IMG.wardrobe, eco: true },
   { id: 10, title: 'Комод «Сканди»', price: 26500, category: 'wardrobes', style: 'Скандинавский', material: 'Белый лак', img: IMG.wardrobe },
 
   { id: 11, title: 'Кухня «Альпина» прямая', price: 128000, category: 'kitchens', style: 'Минимализм', material: 'Белый лак', img: IMG.kitchen, badge: 'Хит' },
-  { id: 12, title: 'Кухня «Терра» угловая', price: 184500, oldPrice: 210000, category: 'kitchens', style: 'Классика', material: 'Орех', img: IMG.kitchen, badge: 'Скидка' },
+  { id: 12, title: 'Кухня «Терра» угловая', price: 184500, oldPrice: 210000, category: 'kitchens', style: 'Классика', material: 'Орех', img: IMG.kitchen, badge: 'Скидка', eco: true },
 
-  { id: 13, title: 'Кровать «Хюгге» 160×200', price: 48900, category: 'beds', style: 'Скандинавский', material: 'Ткань', img: IMG.bed, badge: 'Хит' },
-  { id: 14, title: 'Кровать «Лофт» 180×200', price: 56400, category: 'beds', style: 'Лофт', material: 'Дуб', img: IMG.bed },
+  { id: 13, title: 'Кровать «Хюгге» 160×200', price: 48900, category: 'beds', style: 'Скандинавский', material: 'Ткань', img: IMG.bed, badge: 'Хит', eco: true },
+  { id: 14, title: 'Кровать «Лофт» 180×200', price: 56400, category: 'beds', style: 'Лофт', material: 'Дуб', img: IMG.bed, eco: true },
 
   { id: 15, title: 'Стеллаж «Лофт»', price: 41200, category: 'storage', style: 'Лофт', material: 'Металл', img: IMG.shelf, badge: 'Хит' },
-  { id: 16, title: 'Книжный шкаф «Классик»', price: 34800, category: 'storage', style: 'Классика', material: 'Дуб', img: IMG.shelf },
+  { id: 16, title: 'Книжный шкаф «Классик»', price: 34800, category: 'storage', style: 'Классика', material: 'Дуб', img: IMG.shelf, eco: true },
 ];
 
 const catLabel: Record<string, string> = {

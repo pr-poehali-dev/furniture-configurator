@@ -8,6 +8,7 @@ import WhyUsSection from '@/components/WhyUsSection';
 const ProjectsCarousel = lazy(() => import('@/components/ProjectsCarousel'));
 const ConstructorSection = lazy(() => import('@/components/ConstructorSection'));
 const QuizSection = lazy(() => import('@/components/QuizSection'));
+const RoomAISection = lazy(() => import('@/components/RoomAISection'));
 const CatalogSection = lazy(() => import('@/components/CatalogSection'));
 const MaterialsSection = lazy(() => import('@/components/MaterialsSection'));
 const ReviewsSection = lazy(() => import('@/components/ReviewsSection'));
@@ -38,6 +39,7 @@ export default function Index() {
         <ProjectsCarousel />
         <ConstructorSection />
         <QuizSection />
+        <RoomAISection />
         <CatalogSection />
         <MaterialsSection />
         <ReviewsSection />
