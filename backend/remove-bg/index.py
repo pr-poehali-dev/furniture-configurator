@@ -6,7 +6,7 @@ import urllib.request
 from collections import deque
 
 import boto3
-from PIL import Image, ImageFilter
+from PIL import Image, ImageFilter, ImageChops, ImageOps
 
 
 def _cors():
@@ -161,6 +161,42 @@ def _remove_bg(src_bytes):
 
     out = io.BytesIO()
     img.save(out, format='PNG', optimize=True)
+    return out.getvalue(), img
+
+
+def _depth_map(cut_img):
+    '''Строит карту глубины (depth) предмета для 2.5D-параллакса.
+    Чёрный = дальше, белый = ближе к камере.
+    Глубина = расстояние до фона (distance transform) + подсветка яркости.'''
+    W, H = cut_img.size
+    alpha = cut_img.split()[3]
+    # маска предмета
+    solid = alpha.point(lambda v: 255 if v > 80 else 0)
+
+    # приближённый distance transform: многократное «сжатие» внутрь
+    dist = solid.copy()
+    acc = Image.new('L', (W, H), 0)
+    cur = solid
+    steps = max(6, min(W, H) // 22)
+    for _ in range(steps):
+        cur = cur.filter(ImageFilter.MinFilter(3))
+        acc = ImageChops.add(acc, cur.point(lambda v: 255 // steps if v > 127 else 0))
+    dist = acc  # центр предмета ярче (дальше от края) => выпуклость
+
+    # вклад яркости поверхности (светлые места кажутся ближе)
+    gray = cut_img.convert('L')
+    gray = ImageChops.multiply(gray, solid)
+    gray = gray.point(lambda v: int(v * 0.45))
+
+    depth = ImageChops.add(dist.point(lambda v: int(v * 0.7)), gray)
+    depth = ImageChops.multiply(depth, solid)
+    depth = depth.filter(ImageFilter.GaussianBlur(3))
+    # нормализация контраста
+    depth = ImageOps.autocontrast(depth, cutoff=2)
+    depth = ImageChops.multiply(depth, solid)
+
+    out = io.BytesIO()
+    depth.save(out, format='PNG', optimize=True)
     return out.getvalue()
 
 
@@ -198,9 +234,11 @@ def handler(event, context):
     access_key = os.environ['AWS_ACCESS_KEY_ID']
     secret_key = os.environ['AWS_SECRET_ACCESS_KEY']
 
-    digest = hashlib.md5(('v3:' + image_url).encode('utf-8')).hexdigest()
+    digest = hashlib.md5(('v4:' + image_url).encode('utf-8')).hexdigest()
     key = f'cutout/{digest}.png'
+    depth_key = f'cutout/{digest}_depth.png'
     cdn_url = f'https://cdn.poehali.dev/projects/{access_key}/bucket/{key}'
+    depth_url = f'https://cdn.poehali.dev/projects/{access_key}/bucket/{depth_key}'
 
     s3 = boto3.client(
         's3',
@@ -210,11 +248,11 @@ def handler(event, context):
     )
 
     try:
-        s3.head_object(Bucket='files', Key=key)
+        s3.head_object(Bucket='files', Key=depth_key)
         return {
             'statusCode': 200,
             'headers': {**_cors(), 'Content-Type': 'application/json'},
-            'body': json.dumps({'url': cdn_url, 'cached': True}),
+            'body': json.dumps({'url': cdn_url, 'depthUrl': depth_url, 'cached': True}),
         }
     except Exception:
         pass
@@ -223,12 +261,14 @@ def handler(event, context):
     with urllib.request.urlopen(req, timeout=25) as resp:
         src_bytes = resp.read()
 
-    out_bytes = _remove_bg(src_bytes)
+    out_bytes, cut_img = _remove_bg(src_bytes)
+    depth_bytes = _depth_map(cut_img)
 
     s3.put_object(Bucket='files', Key=key, Body=out_bytes, ContentType='image/png')
+    s3.put_object(Bucket='files', Key=depth_key, Body=depth_bytes, ContentType='image/png')
 
     return {
         'statusCode': 200,
         'headers': {**_cors(), 'Content-Type': 'application/json'},
-        'body': json.dumps({'url': cdn_url, 'cached': False}),
+        'body': json.dumps({'url': cdn_url, 'depthUrl': depth_url, 'cached': False}),
     }

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { BACKEND } from '@/lib/backend';
 
-const MEM = new Map<string, string>();
-const STORAGE = 'artora_cutouts_v3';
+type Cut = { url: string; depthUrl: string };
+const MEM = new Map<string, Cut>();
+const STORAGE = 'artora_cutouts_v4';
 
-function loadStore(): Record<string, string> {
+function loadStore(): Record<string, Cut> {
   try {
     return JSON.parse(localStorage.getItem(STORAGE) || '{}');
   } catch {
@@ -12,7 +13,7 @@ function loadStore(): Record<string, string> {
   }
 }
 
-function saveStore(map: Record<string, string>) {
+function saveStore(map: Record<string, Cut>) {
   try {
     localStorage.setItem(STORAGE, JSON.stringify(map));
   } catch {
@@ -21,20 +22,21 @@ function saveStore(map: Record<string, string>) {
 }
 
 /**
- * Возвращает версию фото с удалённым фоном (прозрачный PNG).
- * Результат кэшируется в памяти и localStorage, а на бэкенде — в S3.
- * Пока идёт обработка, отдаётся исходное фото (ready=false).
+ * Возвращает вырезанное фото (прозрачный PNG) и карту глубины (depthUrl)
+ * для 2.5D-объёма. Кэшируется в памяти, localStorage и S3.
+ * Пока идёт обработка — отдаётся исходное фото (ready=false).
  */
-export function useCutout(src: string): { url: string; ready: boolean } {
-  const [url, setUrl] = useState<string>(() => MEM.get(src) || loadStore()[src] || src);
-  const [ready, setReady] = useState<boolean>(() => MEM.has(src) || !!loadStore()[src]);
+export function useCutout(src: string): { url: string; depthUrl: string; ready: boolean } {
+  const init = () => MEM.get(src) || loadStore()[src];
+  const [data, setData] = useState<Cut>(() => init() || { url: src, depthUrl: '' });
+  const [ready, setReady] = useState<boolean>(() => !!init());
 
   useEffect(() => {
     if (!src) return;
 
     const cached = MEM.get(src) || loadStore()[src];
     if (cached) {
-      setUrl(cached);
+      setData(cached);
       setReady(true);
       return;
     }
@@ -46,13 +48,14 @@ export function useCutout(src: string): { url: string; ready: boolean } {
       body: JSON.stringify({ imageUrl: src }),
     })
       .then((r) => r.json())
-      .then((data) => {
-        if (!alive || !data?.url) return;
-        MEM.set(src, data.url);
+      .then((res) => {
+        if (!alive || !res?.url) return;
+        const cut: Cut = { url: res.url, depthUrl: res.depthUrl || '' };
+        MEM.set(src, cut);
         const store = loadStore();
-        store[src] = data.url;
+        store[src] = cut;
         saveStore(store);
-        setUrl(data.url);
+        setData(cut);
         setReady(true);
       })
       .catch(() => {
@@ -64,5 +67,5 @@ export function useCutout(src: string): { url: string; ready: boolean } {
     };
   }, [src]);
 
-  return { url, ready };
+  return { url: data.url, depthUrl: data.depthUrl, ready };
 }
