@@ -78,6 +78,12 @@ export function calcPrice(config: Config): number {
   );
 }
 
+export const INSTALLMENT_MONTHS = 12;
+
+export function calcMonthly(price: number): number {
+  return Math.ceil(price / INSTALLMENT_MONTHS / 10) * 10;
+}
+
 export const GALLERY: Record<FurnitureType, string[]> = {
   table: [
     'https://cdn.poehali.dev/projects/c7826767-e216-4db9-a10a-19a218146298/files/21a838e7-7ffe-4044-a0f1-ec27e00b3861.jpg',

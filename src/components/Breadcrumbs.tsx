@@ -5,6 +5,7 @@ const CRUMBS = [
   { label: 'Конструктор мебели', href: '#constructor' },
   { label: 'Каталог', href: '#catalog' },
   { label: 'Материалы', href: '#materials' },
+  { label: 'Отзывы', href: '#reviews' },
   { label: 'Контакты', href: '#contacts' },
 ];
 

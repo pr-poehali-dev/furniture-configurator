@@ -11,6 +11,8 @@ import {
   FURNITURE_TYPES,
   GALLERY,
   Option,
+  calcMonthly,
+  INSTALLMENT_MONTHS,
 } from './types';
 
 const Scene3D = lazy(() => import('./Scene3D'));
@@ -168,9 +170,17 @@ export default function ConstructorViewer({
           ))}
         </div>
 
-        <div className="flex items-center justify-between py-4 border-t border-[#333] mb-6">
-          <span className="font-montserrat font-700 text-white text-sm uppercase tracking-wider">Стоимость</span>
-          <span className="font-montserrat font-900 text-2xl text-[#D2B48C]">{price.toLocaleString('ru')} ₽</span>
+        <div className="py-4 border-t border-[#333] mb-6">
+          <div className="flex items-center justify-between">
+            <span className="font-montserrat font-700 text-white text-sm uppercase tracking-wider">Стоимость</span>
+            <span className="font-montserrat font-900 text-2xl text-[#D2B48C]">{price.toLocaleString('ru')} ₽</span>
+          </div>
+          <div className="flex items-center gap-2 mt-2 text-[#A0784A]">
+            <Icon name="CreditCard" size={14} />
+            <span className="font-opensans text-xs">
+              или от <span className="font-700">{calcMonthly(price).toLocaleString('ru')} ₽/мес</span> в рассрочку на {INSTALLMENT_MONTHS} мес. без переплаты
+            </span>
+          </div>
         </div>
 
         {submitted ? (
