@@ -3,69 +3,67 @@ import { BACKEND } from '@/lib/backend';
 
 type State = { status: 'idle' | 'pending' | 'ready' | 'error'; url: string };
 const MEM = new Map<string, string>();
-const STORAGE = 'artora_studio_v1';
-
-function loadStore(): Record<string, string> {
-  try { return JSON.parse(localStorage.getItem(STORAGE) || '{}'); } catch { return {}; }
-}
-function saveStore(map: Record<string, string>) {
-  try { localStorage.setItem(STORAGE, JSON.stringify(map)); } catch { /* ignore */ }
-}
 
 /**
  * ИИ-художник: дорисовывает предмет до целого и делает студийный кадр.
- * Запускается по требованию (enabled=true). Долгая генерация не блокирует UI —
- * запрос start идёт фоном, а статус опрашивается по готовности файла в S3.
+ * Генерация разовая — результат фиксируется в БД на бэкенде. Здесь только
+ * запрашиваем готовый кадр или запускаем разовую генерацию (enabled=true).
  */
 export function useStudioShot(src: string, enabled: boolean): State {
-  const cached = MEM.get(src) || loadStore()[src];
+  const cached = MEM.get(src);
   const [state, setState] = useState<State>(
     cached ? { status: 'ready', url: cached } : { status: 'idle', url: '' }
   );
   const timer = useRef<number | null>(null);
 
   useEffect(() => {
-    const hit = MEM.get(src) || loadStore()[src];
-    if (hit) { setState({ status: 'ready', url: hit }); return; }
-    if (!enabled || !src) return;
+    if (MEM.has(src)) { setState({ status: 'ready', url: MEM.get(src)! }); return; }
+    if (!src) return;
 
     let alive = true;
-    setState({ status: 'pending', url: '' });
+
+    const ask = (action: 'status' | 'start') =>
+      fetch(BACKEND.studioShot, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, imageUrl: src }),
+      }).then((r) => r.json());
 
     const finish = (url: string) => {
       MEM.set(src, url);
-      const store = loadStore(); store[src] = url; saveStore(store);
       if (alive) setState({ status: 'ready', url });
     };
 
-    const poll = () => {
-      timer.current = window.setTimeout(async () => {
+    // сначала проверяем — вдруг кадр уже зафиксирован в БД
+    ask('status')
+      .then((d) => {
         if (!alive) return;
-        try {
-          const r = await fetch(BACKEND.studioShot, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'status', imageUrl: src }),
+        if (d.status === 'ready' && d.url) { finish(d.url); return; }
+        if (!enabled) { setState({ status: 'idle', url: '' }); return; }
+
+        // запускаем разовую генерацию
+        setState({ status: 'pending', url: '' });
+        ask('start')
+          .then((res) => {
+            if (!alive) return;
+            if (res.status === 'ready' && res.url) finish(res.url);
+            else setState({ status: 'error', url: '' });
+          })
+          .catch(() => {
+            // запрос мог оборваться по таймауту шлюза — добиваем опросом статуса
+            if (!alive) return;
+            const poll = () => {
+              timer.current = window.setTimeout(() => {
+                ask('status').then((s) => {
+                  if (!alive) return;
+                  if (s.status === 'ready' && s.url) finish(s.url);
+                  else poll();
+                }).catch(() => { if (alive) poll(); });
+              }, 4000);
+            };
+            poll();
           });
-          const d = await r.json();
-          if (!alive) return;
-          if (d.status === 'ready' && d.url) finish(d.url);
-          else if (d.status === 'error') setState({ status: 'error', url: '' });
-          else poll();
-        } catch { if (alive) poll(); }
-      }, 4000);
-    };
-
-    // запускаем генерацию (запрос может оборваться по таймауту шлюза — это ок,
-    // результат всё равно появится в S3 и его поймает опрос статуса)
-    fetch(BACKEND.studioShot, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'start', imageUrl: src }),
-    })
-      .then((r) => r.json())
-      .then((d) => { if (alive && d.status === 'ready' && d.url) finish(d.url); })
-      .catch(() => { /* шлюз оборвал — ловим через poll */ });
-
-    poll();
+      })
+      .catch(() => { if (alive) setState({ status: 'error', url: '' }); });
 
     return () => { alive = false; if (timer.current) clearTimeout(timer.current); };
   }, [src, enabled]);

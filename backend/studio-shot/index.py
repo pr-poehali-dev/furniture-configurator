@@ -3,9 +3,9 @@ import os
 import hashlib
 import urllib.request
 import urllib.error
-import base64
 
 import boto3
+import psycopg2
 
 
 def _cors():
@@ -26,13 +26,15 @@ def _json(status, payload):
 
 
 PROMPT = (
-    'Professional e-commerce product photo of this exact furniture item. '
-    'Reconstruct and complete the object if it is cropped or partially visible — '
-    'show the entire piece fully, with correct proportions and realistic materials. '
-    'Place it centered on a clean soft neutral light-beige studio background, '
-    'with soft cinematic studio lighting, gentle reflections and a soft contact shadow on the floor. '
-    'Keep the original colors, texture and design faithful. Photorealistic, high detail, catalog quality.'
+    'Turn this into a professional e-commerce product photo of this exact furniture item. '
+    'If the item is cropped or only partially visible, reconstruct and complete the whole piece '
+    'with correct proportions and faithful materials. '
+    'Center it on a clean soft light-beige studio background with soft cinematic studio lighting, '
+    'gentle reflections and a soft contact shadow on the floor. '
+    'Keep the original colors, texture and design. Photorealistic, high detail, catalog quality.'
 )
+
+FAL_MODEL = 'fal-ai/flux-pro/kontext'
 
 
 def _s3():
@@ -43,86 +45,77 @@ def _s3():
     )
 
 
-def _extract_image_url(out):
-    '''Достаёт ссылку на результат из разных форматов ответа polza.ai Media API.'''
-    if not isinstance(out, dict):
-        return None
-    # частые варианты
-    for k in ('output', 'result', 'data', 'images'):
-        v = out.get(k)
-        if isinstance(v, str) and v.startswith('http'):
-            return v
-        if isinstance(v, list) and v:
-            first = v[0]
-            if isinstance(first, str) and first.startswith('http'):
-                return first
-            if isinstance(first, dict):
-                for kk in ('url', 'image_url', 'image'):
-                    if isinstance(first.get(kk), str) and first[kk].startswith('http'):
-                        return first[kk]
-        if isinstance(v, dict):
-            for kk in ('url', 'image_url', 'image'):
-                if isinstance(v.get(kk), str) and v[kk].startswith('http'):
-                    return v[kk]
-    for kk in ('url', 'image_url', 'image'):
-        if isinstance(out.get(kk), str) and out[kk].startswith('http'):
-            return out[kk]
-    return None
+def _schema():
+    return os.environ['MAIN_DB_SCHEMA']
 
 
-def _generate(image_url, key, err_key, api_key):
-    '''Рисует студийный кадр через polza.ai Media API (image-to-image),
-    скачивает результат и кладёт в S3. Синхронно (нужен увеличенный таймаут).'''
-    s3 = _s3()
+def _get_saved(src_url):
+    conn = psycopg2.connect(os.environ['DATABASE_URL'])
     try:
-        payload = json.dumps({
-            'model': 'bytedance/seedream-4.0',
-            'prompt': PROMPT,
-            'image_urls': [image_url],
-            'image_size': {'width': 1024, 'height': 1024},
-            'n': 1,
-        }).encode('utf-8')
-
-        req = urllib.request.Request(
-            'https://api.polza.ai/api/v1/images/generations',
-            data=payload,
-            headers={'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'},
-            method='POST',
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT studio_url FROM {_schema()}.studio_shots WHERE src_url = %s",
+            (src_url,),
         )
-        with urllib.request.urlopen(req, timeout=240) as r:
+        row = cur.fetchone()
+        return row[0] if row else None
+    finally:
+        conn.close()
+
+
+def _save(src_url, studio_url):
+    conn = psycopg2.connect(os.environ['DATABASE_URL'])
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            f"INSERT INTO {_schema()}.studio_shots (src_url, studio_url) VALUES (%s, %s) "
+            f"ON CONFLICT (src_url) DO UPDATE SET studio_url = EXCLUDED.studio_url, created_at = now()",
+            (src_url, studio_url),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _fal_generate(image_url, fal_key):
+    '''ИИ-художник через fal.ai FLUX Kontext (image-to-image).
+    Возвращает (url, None) или (None, detail).'''
+    payload = json.dumps({
+        'prompt': PROMPT,
+        'image_url': image_url,
+        'aspect_ratio': '1:1',
+        'output_format': 'png',
+        'num_images': 1,
+        'safety_tolerance': '5',
+    }).encode('utf-8')
+
+    req = urllib.request.Request(
+        f'https://fal.run/{FAL_MODEL}',
+        data=payload,
+        headers={'Authorization': f'Key {fal_key}', 'Content-Type': 'application/json'},
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=180) as r:
             out = json.loads(r.read().decode('utf-8'))
-
-        # результат может быть ссылкой или base64
-        gen_url = _extract_image_url(out)
-        if gen_url:
-            with urllib.request.urlopen(gen_url, timeout=60) as r:
-                img_bytes = r.read()
-        else:
-            b64 = None
-            for k in ('b64_json', 'image_base64', 'b64'):
-                if isinstance(out.get(k), str):
-                    b64 = out[k]; break
-            if not b64:
-                raise RuntimeError('Неожиданный ответ: ' + json.dumps(out)[:200])
-            img_bytes = base64.b64decode(b64)
-
-        s3.put_object(Bucket='files', Key=key, Body=img_bytes, ContentType='image/png')
-        return True, None
     except urllib.error.HTTPError as e:
-        detail = e.read().decode('utf-8')[:400]
-        s3.put_object(Bucket='files', Key=err_key, Body=detail.encode('utf-8'), ContentType='text/plain')
-        return False, detail
+        return None, e.read().decode('utf-8')[:400]
     except Exception as e:
-        s3.put_object(Bucket='files', Key=err_key, Body=str(e)[:400].encode('utf-8'), ContentType='text/plain')
-        return False, str(e)[:400]
+        return None, str(e)[:400]
+
+    images = out.get('images') or []
+    if images and isinstance(images[0], dict) and images[0].get('url'):
+        return images[0]['url'], None
+    return None, 'Неожиданный ответ fal.ai: ' + json.dumps(out)[:200]
 
 
 def handler(event, context):
     '''
-    ИИ-художник студийного кадра: дорисовывает предмет до целого, ставит на
-    чистый студийный фон со светом и мягкой тенью (OpenAI gpt-image-1).
-    POST {action:"status", imageUrl} -> {status: ready|none|error, url?}
-    POST {imageUrl} (или action:"start") -> запускает генерацию, возвращает url когда готово.
+    ИИ-художник студийного кадра (fal.ai): дорисовывает предмет до целого и
+    ставит на студийный фон со светом и тенью. Результат сохраняется в БД и S3
+    ОДИН раз на исходное фото — далее отдаётся готовая ссылка мгновенно.
+    POST {action:"status", imageUrl} -> {status: ready|none, url?}
+    POST {action:"start", imageUrl}  -> генерирует и фиксирует кадр.
     Args: event с httpMethod, body
           context - объект с request_id
     Returns: HTTP-ответ JSON
@@ -143,39 +136,39 @@ def handler(event, context):
         return _json(400, {'error': 'imageUrl обязателен'})
 
     action = body.get('action', 'start')
-    access_key = os.environ['AWS_ACCESS_KEY_ID']
-    digest = hashlib.md5(('studio:v3:' + image_url).encode('utf-8')).hexdigest()
-    key = f'studio/{digest}.png'
-    err_key = f'studio/{digest}.err'
-    cdn_url = f'https://cdn.poehali.dev/projects/{access_key}/bucket/{key}'
 
-    s3 = _s3()
-
-    # уже готово?
+    # уже зафиксировано в БД?
     try:
-        s3.head_object(Bucket='files', Key=key)
-        return _json(200, {'status': 'ready', 'url': cdn_url})
-    except Exception:
-        pass
+        saved = _get_saved(image_url)
+    except Exception as e:
+        return _json(500, {'error': 'DB error', 'detail': str(e)[:300]})
+    if saved:
+        return _json(200, {'status': 'ready', 'url': saved})
 
     if action == 'status':
-        try:
-            obj = s3.get_object(Bucket='files', Key=err_key)
-            return _json(200, {'status': 'error', 'detail': obj['Body'].read().decode('utf-8')[:300]})
-        except Exception:
-            return _json(200, {'status': 'pending'})
+        return _json(200, {'status': 'none'})
 
-    # action == start: синхронная генерация (функция с увеличенным таймаутом)
-    api_key = os.environ.get('POLZA_AI_API_KEY')
-    if not api_key:
-        return _json(500, {'error': 'POLZA_AI_API_KEY не настроен'})
-    # сбрасываем прошлую ошибку
+    # action == start: разовая генерация
+    fal_key = os.environ.get('FAL_API_KEY')
+    if not fal_key:
+        return _json(500, {'error': 'FAL_API_KEY не настроен'})
+
+    gen_url, detail = _fal_generate(image_url, fal_key)
+    if not gen_url:
+        return _json(502, {'status': 'error', 'detail': detail})
+
+    # перекладываем результат в наш S3, чтобы ссылка была вечной
+    access_key = os.environ['AWS_ACCESS_KEY_ID']
+    digest = hashlib.md5(('studio:fal:' + image_url).encode('utf-8')).hexdigest()
+    key = f'studio/{digest}.png'
+    cdn_url = f'https://cdn.poehali.dev/projects/{access_key}/bucket/{key}'
     try:
-        s3.delete_object(Bucket='files', Key=err_key)
+        with urllib.request.urlopen(gen_url, timeout=60) as r:
+            img_bytes = r.read()
+        _s3().put_object(Bucket='files', Key=key, Body=img_bytes, ContentType='image/png')
+        final_url = cdn_url
     except Exception:
-        pass
+        final_url = gen_url  # на крайний случай — прямая ссылка fal
 
-    ok, detail = _generate(image_url, key, err_key, api_key)
-    if ok:
-        return _json(200, {'status': 'ready', 'url': cdn_url})
-    return _json(502, {'status': 'error', 'detail': detail})
+    _save(image_url, final_url)
+    return _json(200, {'status': 'ready', 'url': final_url})
