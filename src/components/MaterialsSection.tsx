@@ -137,10 +137,10 @@ export default function MaterialsSection() {
                 </div>
 
                 <button
-                  onClick={() => document.querySelector('#constructor')?.scrollIntoView({ behavior: 'smooth' })}
+                  onClick={() => document.querySelector('#catalog')?.scrollIntoView({ behavior: 'smooth' })}
                   className="mt-6 artora-btn-primary inline-flex items-center gap-2"
                 >
-                  Выбрать в конструкторе
+                  Смотреть в каталоге
                 </button>
               </div>
             </div>

@@ -18,8 +18,8 @@ export default function HeroSection() {
     });
   }, []);
 
-  const scrollToConstructor = () => {
-    document.querySelector('#constructor')?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToRoomAI = () => {
+    document.querySelector('#room-ai')?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const scrollToCatalog = () => {
@@ -82,9 +82,9 @@ export default function HeroSection() {
                 <Icon name="Grid3x3" size={16} />
                 Открыть каталог
               </button>
-              <button onClick={scrollToConstructor} className="artora-btn-outline flex items-center justify-center gap-3">
-                <Icon name="Wrench" size={16} />
-                Собрать своё
+              <button onClick={scrollToRoomAI} className="artora-btn-outline flex items-center justify-center gap-3">
+                <Icon name="Sparkles" size={16} />
+                Подбор по фото
               </button>
             </div>
 

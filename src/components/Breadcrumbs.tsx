@@ -2,7 +2,7 @@ import Icon from '@/components/ui/icon';
 
 const CRUMBS = [
   { label: 'Главная', href: '#hero' },
-  { label: 'Конструктор мебели', href: '#constructor' },
+  { label: 'ИИ-подбор', href: '#room-ai' },
   { label: 'Каталог', href: '#catalog' },
   { label: 'Материалы', href: '#materials' },
   { label: 'Отзывы', href: '#reviews' },

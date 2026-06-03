@@ -6,7 +6,6 @@ import HeroSection from '@/components/HeroSection';
 import WhyUsSection from '@/components/WhyUsSection';
 
 const ProjectsCarousel = lazy(() => import('@/components/ProjectsCarousel'));
-const ConstructorSection = lazy(() => import('@/components/ConstructorSection'));
 const QuizSection = lazy(() => import('@/components/QuizSection'));
 const RoomAISection = lazy(() => import('@/components/RoomAISection'));
 const CatalogSection = lazy(() => import('@/components/CatalogSection'));
@@ -37,7 +36,6 @@ export default function Index() {
       <WhyUsSection />
       <Suspense fallback={null}>
         <ProjectsCarousel />
-        <ConstructorSection />
         <QuizSection />
         <RoomAISection />
         <CatalogSection />

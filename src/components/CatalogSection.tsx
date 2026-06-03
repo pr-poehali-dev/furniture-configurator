@@ -88,7 +88,7 @@ function ProductCard({ p }: { p: Product }) {
 export default function CatalogSection() {
   const [category, setCategory] = useState('all');
   const [materialFilter, setMaterialFilter] = useState('Все');
-  const [priceMax, setPriceMax] = useState(220000);
+  const [priceMax, setPriceMax] = useState(90000);
   const [ecoOnly, setEcoOnly] = useState(false);
   const [visibleCount, setVisibleCount] = useState(8);
 
@@ -159,8 +159,8 @@ export default function CatalogSection() {
             </p>
             <input
               type="range"
-              min={18000}
-              max={220000}
+              min={8000}
+              max={90000}
               step={1000}
               value={priceMax}
               onChange={(e) => setPriceMax(Number(e.target.value))}

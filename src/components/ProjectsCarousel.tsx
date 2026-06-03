@@ -145,11 +145,11 @@ export default function ProjectsCarousel() {
                   <p className="font-opensans text-[#A0784A] font-600 text-sm mt-0.5">{p.price}</p>
                 </div>
                 <button
-                  onClick={() => document.querySelector('#constructor')?.scrollIntoView({ behavior: 'smooth' })}
+                  onClick={() => document.querySelector('#catalog')?.scrollIntoView({ behavior: 'smooth' })}
                   className="w-9 h-9 flex items-center justify-center bg-[#1A1A1A] text-white hover:bg-[#8B4513] transition-colors duration-200"
-                  aria-label="Открыть в конструкторе"
+                  aria-label="Смотреть в каталоге"
                 >
-                  <Icon name="Wrench" size={14} />
+                  <Icon name="ArrowRight" size={14} />
                 </button>
               </div>
             </div>

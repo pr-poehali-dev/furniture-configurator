@@ -18,8 +18,8 @@ const steps = [
     title: 'Какой предмет интересует?',
     options: [
       { id: 'table', label: 'Стол', icon: 'Table' },
-      { id: 'shelf', label: 'Стеллаж', icon: 'Library' },
-      { id: 'nightstand', label: 'Тумба', icon: 'Archive' },
+      { id: 'chair', label: 'Стул', icon: 'Armchair' },
+      { id: 'sofa', label: 'Диван', icon: 'Sofa' },
       { id: 'other', label: 'Другое / не решил', icon: 'HelpCircle' },
     ],
   },

@@ -127,8 +127,8 @@ export default function Product() {
               >
                 <Icon name="ShoppingBag" size={16} /> В корзину
               </button>
-              <Link to="/#constructor" className="artora-btn-outline flex items-center justify-center gap-2 px-5">
-                <Icon name="Wrench" size={16} /> Изменить размеры
+              <Link to="/#room-ai" className="artora-btn-outline flex items-center justify-center gap-2 px-5">
+                <Icon name="Sparkles" size={16} /> Подбор по фото
               </Link>
             </div>
           </div>
