@@ -1,0 +1,23 @@
+{
+  "tests": [
+    {
+      "name": "CORS preflight",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Public products list",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Upload requires valid image",
+      "method": "POST",
+      "path": "/",
+      "body": {"action": "upload", "image": "x"},
+      "expectedStatus": 400
+    }
+  ]
+}

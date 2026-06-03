@@ -1,0 +1,1 @@
+UPDATE t_p47212135_furniture_configurat.products SET is_active = false WHERE title = 'Тестовый стол';

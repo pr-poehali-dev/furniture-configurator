@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import Icon from '@/components/ui/icon';
-import { products } from '@/data/catalog';
+import { useProducts } from '@/context/ProductsContext';
 import { useCart } from '@/context/CartContext';
 
-// Бестселлеры — берём хиты прямо из каталога, чтобы данные всегда были актуальны
-const bestsellers = products.filter((p) => p.badge === 'Хит').slice(0, 8);
-
 export default function ProjectsCarousel() {
+  const { products } = useProducts();
   const { add } = useCart();
+  // Бестселлеры — хиты из каталога; если хитов мало, берём первые товары
+  const hits = products.filter((p) => p.badge === 'Хит');
+  const bestsellers = (hits.length >= 3 ? hits : products).slice(0, 8);
   const [current, setCurrent] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);

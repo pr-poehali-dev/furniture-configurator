@@ -91,6 +91,11 @@
     @apply font-montserrat text-xs font-700 uppercase tracking-[0.3em] text-[#A0784A];
   }
 
+  .adm-input {
+    @apply w-full border border-[#E8E0D4] px-3 py-2.5 font-opensans text-sm text-[#1A1A1A]
+           focus:outline-none focus:border-[#A0784A] transition placeholder:text-[#bbb] bg-white;
+  }
+
   .section-title {
     @apply font-montserrat font-800 text-[#1A1A1A] leading-tight;
   }

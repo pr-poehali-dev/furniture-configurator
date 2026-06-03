@@ -6,4 +6,5 @@ export const BACKEND = {
   removeBg: 'https://functions.poehali.dev/da146b67-9064-42f8-9bd5-204f98110d3d',
   studioShot: 'https://functions.poehali.dev/f75ead8b-2f2c-4caf-a855-121acd5591ed',
   roomAnalyze: 'https://functions.poehali.dev/194ca6d6-69f0-4317-8d21-3220d5dac332',
+  products: 'https://functions.poehali.dev/42edaf0d-93dd-446b-91fe-177b2ad7e5aa',
 };

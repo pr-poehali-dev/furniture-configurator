@@ -2,7 +2,8 @@ import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import Icon from '@/components/ui/icon';
 import { BACKEND } from '@/lib/backend';
-import { products, type Product } from '@/data/catalog';
+import { type Product } from '@/data/catalog';
+import { useProducts } from '@/context/ProductsContext';
 import { useCart } from '@/context/CartContext';
 
 type RoomResult = {
@@ -16,7 +17,7 @@ type RoomResult = {
   comment?: string;
 };
 
-function pickProducts(r: RoomResult): Product[] {
+function pickProducts(r: RoomResult, list: Product[]): Product[] {
   const cats = r.categories || [];
   const mats = r.materials || [];
   const style = r.style;
@@ -31,7 +32,7 @@ function pickProducts(r: RoomResult): Product[] {
     return s;
   };
 
-  return [...products]
+  return [...list]
     .map((p) => ({ p, s: score(p) }))
     .filter((x) => x.s > 0)
     .sort((a, b) => b.s - a.s)
@@ -40,6 +41,7 @@ function pickProducts(r: RoomResult): Product[] {
 }
 
 export default function RoomAISection() {
+  const { products } = useProducts();
   const { add } = useCart();
   const [img, setImg] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -87,7 +89,7 @@ export default function RoomAISection() {
     if (fileRef.current) fileRef.current.value = '';
   };
 
-  const recommended = result ? pickProducts(result) : [];
+  const recommended = result ? pickProducts(result, products) : [];
 
   return (
     <section id="room-ai" className="py-24 lg:py-32 bg-[#FAFAF8]">

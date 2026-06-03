@@ -6,16 +6,29 @@ import FooterSection from '@/components/FooterSection';
 import AIChatWidget from '@/components/AIChatWidget';
 import ProductView3D from '@/components/shop/ProductView3D';
 import { useCart } from '@/context/CartContext';
-import { productById, productConfig, products } from '@/data/catalog';
+import { productById, productConfig } from '@/data/catalog';
+import { useProducts } from '@/context/ProductsContext';
 import { calcMonthly } from '@/components/constructor/types';
 
 const RoomTryOn = lazy(() => import('@/components/constructor/RoomTryOn'));
 
 export default function Product() {
   const { id } = useParams();
-  const product = productById(Number(id));
+  const { products, loading } = useProducts();
+  const product = productById(products, Number(id));
   const { add } = useCart();
   const [tab, setTab] = useState<'view' | 'tryon'>('view');
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white">
+        <Navbar />
+        <div className="max-w-7xl mx-auto px-6 pt-40 pb-40 text-center">
+          <Icon name="Loader" size={36} className="text-[#A0784A] mx-auto animate-spin" />
+        </div>
+      </div>
+    );
+  }
 
   if (!product) {
     return (

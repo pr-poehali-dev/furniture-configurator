@@ -6,9 +6,9 @@ import PhotoTilt3D from '@/components/shop/PhotoTilt3D';
 import {
   CATEGORIES,
   FILTERS_MATERIAL,
-  products,
   type Product,
 } from '@/data/catalog';
+import { useProducts } from '@/context/ProductsContext';
 
 function ProductCard({ p }: { p: Product }) {
   const { add } = useCart();
@@ -86,6 +86,7 @@ function ProductCard({ p }: { p: Product }) {
 }
 
 export default function CatalogSection() {
+  const { products, loading } = useProducts();
   const [category, setCategory] = useState('all');
   const [materialFilter, setMaterialFilter] = useState('Все');
   const [priceMax, setPriceMax] = useState(90000);
@@ -186,7 +187,12 @@ export default function CatalogSection() {
           Найдено товаров: <span className="font-montserrat font-700 text-[#1A1A1A]">{filtered.length}</span>
         </p>
 
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-20">
+            <Icon name="Loader" size={32} className="text-[#A0784A] mx-auto mb-3 animate-spin" />
+            <p className="font-montserrat font-700 text-[#999] uppercase tracking-widest text-sm">Загружаем каталог</p>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="text-center py-20">
             <Icon name="Search" size={32} className="text-[#D2B48C] mx-auto mb-3" />
             <p className="font-montserrat font-700 text-[#999] uppercase tracking-widest text-sm">Ничего не найдено</p>

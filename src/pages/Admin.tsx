@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Icon from '@/components/ui/icon';
 import { BACKEND } from '@/lib/backend';
+import AdminProducts from '@/components/admin/AdminProducts';
 
 const FURNITURE_LABELS: Record<string, string> = { table: 'Стол', shelf: 'Стеллаж', nightstand: 'Тумба' };
 const MATERIAL_LABELS: Record<string, string> = { oak: 'Дуб', walnut: 'Орех', white: 'Белый лак' };
@@ -49,7 +50,7 @@ function configStr(c: Lead['config']) {
 export default function Admin() {
   const [token, setToken] = useState(() => localStorage.getItem('artora_admin_token') || '');
   const [authed, setAuthed] = useState(false);
-  const [tab, setTab] = useState<'leads' | 'chats'>('leads');
+  const [tab, setTab] = useState<'products' | 'leads' | 'chats'>('products');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   const [counts, setCounts] = useState({ leads: 0, chats: 0 });
@@ -87,7 +88,7 @@ export default function Admin() {
   }, []);
 
   useEffect(() => {
-    if (authed) load(token, tab);
+    if (authed && (tab === 'leads' || tab === 'chats')) load(token, tab);
   }, [tab]);
 
   if (!authed) {
@@ -151,6 +152,15 @@ export default function Admin() {
         {/* Tabs */}
         <div className="flex gap-2 mb-6">
           <button
+            onClick={() => setTab('products')}
+            className={`flex items-center gap-2 px-5 py-3 font-montserrat font-700 text-[11px] uppercase tracking-widest border transition ${
+              tab === 'products' ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]' : 'border-[#E8E0D4] text-[#666] hover:border-[#A0784A]'
+            }`}
+          >
+            <Icon name="Package" size={15} />
+            Товары
+          </button>
+          <button
             onClick={() => setTab('leads')}
             className={`flex items-center gap-2 px-5 py-3 font-montserrat font-700 text-[11px] uppercase tracking-widest border transition ${
               tab === 'leads' ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]' : 'border-[#E8E0D4] text-[#666] hover:border-[#A0784A]'
@@ -182,6 +192,9 @@ export default function Admin() {
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 mb-4 font-opensans text-sm">{error}</div>
         )}
+
+        {/* PRODUCTS */}
+        {tab === 'products' && <AdminProducts token={token} />}
 
         {/* LEADS */}
         {tab === 'leads' && (
