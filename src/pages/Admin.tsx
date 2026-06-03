@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Icon from '@/components/ui/icon';
 import { BACKEND } from '@/lib/backend';
 import AdminProducts from '@/components/admin/AdminProducts';
+import AdminAssistants from '@/components/admin/AdminAssistants';
 
 const FURNITURE_LABELS: Record<string, string> = { table: 'Стол', shelf: 'Стеллаж', nightstand: 'Тумба' };
 const MATERIAL_LABELS: Record<string, string> = { oak: 'Дуб', walnut: 'Орех', white: 'Белый лак' };
@@ -50,7 +51,7 @@ function configStr(c: Lead['config']) {
 export default function Admin() {
   const [token, setToken] = useState(() => localStorage.getItem('artora_admin_token') || '');
   const [authed, setAuthed] = useState(false);
-  const [tab, setTab] = useState<'products' | 'leads' | 'chats'>('products');
+  const [tab, setTab] = useState<'products' | 'assistants' | 'leads' | 'chats'>('products');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   const [counts, setCounts] = useState({ leads: 0, chats: 0 });
@@ -161,6 +162,15 @@ export default function Admin() {
             Товары
           </button>
           <button
+            onClick={() => setTab('assistants')}
+            className={`flex items-center gap-2 px-5 py-3 font-montserrat font-700 text-[11px] uppercase tracking-widest border transition ${
+              tab === 'assistants' ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]' : 'border-[#E8E0D4] text-[#666] hover:border-[#A0784A]'
+            }`}
+          >
+            <Icon name="Bot" size={15} />
+            ИИ-помощники
+          </button>
+          <button
             onClick={() => setTab('leads')}
             className={`flex items-center gap-2 px-5 py-3 font-montserrat font-700 text-[11px] uppercase tracking-widest border transition ${
               tab === 'leads' ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]' : 'border-[#E8E0D4] text-[#666] hover:border-[#A0784A]'
@@ -180,13 +190,15 @@ export default function Admin() {
             Переписки
             <span className={`px-2 py-0.5 text-[10px] ${tab === 'chats' ? 'bg-[#A0784A]' : 'bg-[#E8E0D4] text-[#666]'}`}>{counts.chats}</span>
           </button>
-          <button
-            onClick={() => load(token, tab)}
-            className="ml-auto px-4 py-3 border border-[#E8E0D4] text-[#666] hover:border-[#A0784A] transition flex items-center gap-2 font-montserrat text-[11px] uppercase tracking-widest"
-          >
-            <Icon name="RefreshCw" size={14} className={loading ? 'animate-spin' : ''} />
-            Обновить
-          </button>
+          {(tab === 'leads' || tab === 'chats') && (
+            <button
+              onClick={() => load(token, tab)}
+              className="ml-auto px-4 py-3 border border-[#E8E0D4] text-[#666] hover:border-[#A0784A] transition flex items-center gap-2 font-montserrat text-[11px] uppercase tracking-widest"
+            >
+              <Icon name="RefreshCw" size={14} className={loading ? 'animate-spin' : ''} />
+              Обновить
+            </button>
+          )}
         </div>
 
         {error && (
@@ -195,6 +207,9 @@ export default function Admin() {
 
         {/* PRODUCTS */}
         {tab === 'products' && <AdminProducts token={token} />}
+
+        {/* ASSISTANTS */}
+        {tab === 'assistants' && <AdminAssistants token={token} />}
 
         {/* LEADS */}
         {tab === 'leads' && (

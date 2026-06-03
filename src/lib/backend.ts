@@ -7,4 +7,6 @@ export const BACKEND = {
   studioShot: 'https://functions.poehali.dev/f75ead8b-2f2c-4caf-a855-121acd5591ed',
   roomAnalyze: 'https://functions.poehali.dev/194ca6d6-69f0-4317-8d21-3220d5dac332',
   products: 'https://functions.poehali.dev/42edaf0d-93dd-446b-91fe-177b2ad7e5aa',
+  priceImport: 'https://functions.poehali.dev/cc3ef3d2-8fd6-4d0e-ac82-0a8da4f5e415',
+  aiAssistants: 'https://functions.poehali.dev/df4a3b01-9230-4de2-81a0-1168e2c555d4',
 };

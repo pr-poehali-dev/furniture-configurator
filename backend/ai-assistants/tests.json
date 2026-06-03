@@ -1,0 +1,17 @@
+{
+  "tests": [
+    {
+      "name": "CORS preflight",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Manager analysis",
+      "method": "POST",
+      "path": "/",
+      "body": {"role": "manager"},
+      "expectedStatus": 200
+    }
+  ]
+}

@@ -24,6 +24,10 @@ export default function AdminProducts({ token }: { token: string }) {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const pdfRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [importPreview, setImportPreview] = useState<Partial<Product>[] | null>(null);
+  const [importSaving, setImportSaving] = useState(false);
 
   const headers = token ? { 'Content-Type': 'application/json', 'X-Admin-Token': token } : { 'Content-Type': 'application/json' };
 
@@ -97,6 +101,59 @@ export default function AdminProducts({ token }: { token: string }) {
     reader.readAsDataURL(file);
   };
 
+  const onPdf = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      setImporting(true);
+      setError('');
+      setImportPreview(null);
+      try {
+        const res = await fetch(BACKEND.priceImport, {
+          method: 'POST', headers,
+          body: JSON.stringify({ pdf: reader.result }),
+        });
+        const data = await res.json();
+        if (!res.ok) { setError(data.error || 'Не удалось распознать PDF'); return; }
+        if (!data.products?.length) { setError('В PDF не найдено товаров'); return; }
+        setImportPreview(data.products);
+      } catch {
+        setError('Ошибка импорта');
+      } finally {
+        setImporting(false);
+        if (pdfRef.current) pdfRef.current.value = '';
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const confirmImport = async () => {
+    if (!importPreview || importSaving) return;
+    setImportSaving(true);
+    setError('');
+    try {
+      for (const p of importPreview) {
+        await fetch(BACKEND.products, {
+          method: 'POST', headers,
+          body: JSON.stringify({ ...p, isActive: true, eco: false }),
+        });
+      }
+      setImportPreview(null);
+      load();
+    } catch {
+      setError('Ошибка при сохранении товаров');
+    } finally {
+      setImportSaving(false);
+    }
+  };
+
+  const updImport = (i: number, patch: Partial<Product>) =>
+    setImportPreview((list) => list ? list.map((p, idx) => idx === i ? { ...p, ...patch } : p) : list);
+
+  const removeImport = (i: number) =>
+    setImportPreview((list) => list ? list.filter((_, idx) => idx !== i) : list);
+
   const upd = (patch: Partial<Product>) => setEditing((p) => p ? { ...p, ...patch } : p);
 
   return (
@@ -106,8 +163,13 @@ export default function AdminProducts({ token }: { token: string }) {
           Всего товаров: <span className="font-montserrat font-700 text-[#1A1A1A]">{items.length}</span>
         </p>
         <div className="flex gap-2">
+          <input ref={pdfRef} type="file" accept="application/pdf" className="hidden" onChange={onPdf} />
           <button onClick={load} className="px-4 py-2.5 border border-[#E8E0D4] text-[#666] hover:border-[#A0784A] transition flex items-center gap-2 font-montserrat text-[11px] uppercase tracking-widest">
             <Icon name="RefreshCw" size={14} className={loading ? 'animate-spin' : ''} /> Обновить
+          </button>
+          <button onClick={() => pdfRef.current?.click()} disabled={importing} className="px-4 py-2.5 border border-[#A0784A] text-[#8B4513] hover:bg-[#F0E8DC] disabled:opacity-50 transition flex items-center gap-2 font-montserrat font-700 text-[11px] uppercase tracking-widest">
+            {importing ? <Icon name="Loader" size={14} className="animate-spin" /> : <Icon name="FileText" size={14} />}
+            {importing ? 'Распознаём...' : 'Импорт из PDF'}
           </button>
           <button onClick={() => { setEditing({ ...EMPTY }); setError(''); }} className="px-4 py-2.5 bg-[#1A1A1A] text-white hover:bg-[#8B4513] transition flex items-center gap-2 font-montserrat font-700 text-[11px] uppercase tracking-widest">
             <Icon name="Plus" size={14} /> Добавить товар
@@ -249,6 +311,47 @@ export default function AdminProducts({ token }: { token: string }) {
                 Сохранить
               </button>
               <button onClick={() => setEditing(null)} className="px-6 border border-[#E8E0D4] text-[#666] hover:border-[#A0784A] font-montserrat font-700 uppercase tracking-widest text-xs transition">
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import preview modal */}
+      {importPreview && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center p-4 overflow-y-auto" onClick={() => !importSaving && setImportPreview(null)}>
+          <div className="bg-white w-full max-w-3xl my-8" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-[#1A1A1A] text-white p-4 flex items-center justify-between">
+              <span className="font-montserrat font-700 text-sm">Импорт из прайс-листа · найдено {importPreview.length}</span>
+              <button onClick={() => !importSaving && setImportPreview(null)} aria-label="Закрыть"><Icon name="X" size={18} /></button>
+            </div>
+
+            <div className="p-4 max-h-[60vh] overflow-y-auto space-y-2">
+              <p className="font-opensans text-[#888] text-xs mb-2">Проверьте и при необходимости поправьте товары. Фото можно добавить позже, отредактировав товар.</p>
+              {importPreview.map((p, i) => (
+                <div key={i} className="border border-[#E8E0D4] p-3 flex flex-wrap items-center gap-2">
+                  <input value={p.title || ''} onChange={(e) => updImport(i, { title: e.target.value })} className="adm-input flex-1 min-w-[180px]" placeholder="Название" />
+                  <input type="number" value={p.price || ''} onChange={(e) => updImport(i, { price: Number(e.target.value) })} className="adm-input w-28" placeholder="Цена" />
+                  <select value={p.category || 'tables'} onChange={(e) => updImport(i, { category: e.target.value })} className="adm-input w-32">
+                    {PRODUCT_CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                  </select>
+                  <select value={p.material || 'Дуб'} onChange={(e) => updImport(i, { material: e.target.value })} className="adm-input w-32">
+                    {PRODUCT_MATERIALS.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <button onClick={() => removeImport(i)} className="text-[#C0392B] hover:bg-red-50 p-2 transition" aria-label="Убрать">
+                    <Icon name="Trash2" size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-4 border-t border-[#E8E0D4] flex gap-3">
+              <button onClick={confirmImport} disabled={importSaving || importPreview.length === 0} className="flex-1 bg-[#A0784A] hover:bg-[#8B4513] disabled:opacity-50 text-white font-montserrat font-700 uppercase tracking-widest text-xs py-3.5 transition flex items-center justify-center gap-2">
+                {importSaving ? <Icon name="Loader" size={14} className="animate-spin" /> : <Icon name="Check" size={14} />}
+                Добавить все ({importPreview.length})
+              </button>
+              <button onClick={() => setImportPreview(null)} disabled={importSaving} className="px-6 border border-[#E8E0D4] text-[#666] hover:border-[#A0784A] font-montserrat font-700 uppercase tracking-widest text-xs transition">
                 Отмена
               </button>
             </div>
