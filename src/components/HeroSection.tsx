@@ -91,9 +91,9 @@ export default function HeroSection() {
             {/* Stats */}
             <div data-animate className="flex gap-8 pt-6 border-t border-[#E8E0D4]">
               {[
-                { num: '2 400+', label: 'реализованных проектов' },
-                { num: '5 лет', label: 'гарантия на изделия' },
-                { num: '14 дней', label: 'средний срок изготовления' },
+                { num: '12 000+', label: 'довольных покупателей' },
+                { num: '5 лет', label: 'гарантия на мебель' },
+                { num: '24 часа', label: 'быстрая доставка' },
               ].map((s) => (
                 <div key={s.label} className="flex flex-col">
                   <span className="font-montserrat font-900 text-2xl text-[#1A1A1A]">{s.num}</span>
